@@ -45,10 +45,9 @@ export const MeetingRecorder: React.FC<MeetingRecorderProps> = ({
 
   const startScreenRecording = async () => {
     try {
-      // Request screen capture
+      // Request screen capture - removed invalid mediaSource property
       const displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          mediaSource: 'screen' as any,
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           frameRate: { ideal: 30 }

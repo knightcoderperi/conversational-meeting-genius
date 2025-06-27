@@ -90,7 +90,18 @@ export const Dashboard = () => {
         return;
       }
 
-      setMeetings(data || []);
+      // Transform the data to match our Meeting interface
+      const transformedMeetings = (data || []).map(meeting => ({
+        id: meeting.id,
+        title: meeting.title,
+        platform: meeting.platform,
+        status: meeting.status,
+        duration: meeting.duration,
+        created_at: meeting.created_at,
+        participants: Array.isArray(meeting.participants) ? meeting.participants : []
+      }));
+
+      setMeetings(transformedMeetings);
     } catch (error) {
       console.error('Error:', error);
     } finally {
