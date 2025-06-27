@@ -41,12 +41,12 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
 
   // Quick action buttons for meeting analysis
   const quickQueries = [
-    "📝 Summarize the meeting",
-    "✅ What are the action items?",
+    "📝 Summarize the meeting so far",
+    "✅ What are the action items mentioned?",
     "💡 What decisions were made?",
-    "🔍 What are the main topics?",
-    "⏱️ What was discussed recently?",
-    "📊 Give me meeting insights"
+    "🔍 What are the main topics discussed?",
+    "⏱️ What was discussed in the last few minutes?",
+    "📊 Give me key insights from the meeting"
   ];
 
   useEffect(() => {
@@ -58,8 +58,12 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
   };
 
   const getMeetingContext = (): string => {
-    return transcriptionHistory
-      .filter(segment => segment.isFinal)
+    const finalSegments = transcriptionHistory.filter(segment => segment.isFinal);
+    if (finalSegments.length === 0) {
+      return '';
+    }
+    
+    return finalSegments
       .map(segment => `[${segment.timestamp}] ${segment.speaker}: ${segment.text}`)
       .join('\n');
   };
@@ -68,7 +72,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     const context = getMeetingContext();
     
     if (!context.trim()) {
-      toast.error('No meeting data available yet. Start recording to begin.');
+      toast.error('No meeting transcription available yet. Please start speaking during the recording.');
       return;
     }
 
@@ -85,6 +89,8 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     setMessages(prev => [...prev, userMessage]);
 
     try {
+      console.log('Sending to Groq AI:', { message, contextLength: context.length });
+      
       // Call Groq AI edge function
       const { data, error } = await supabase.functions.invoke('groq-chat', {
         body: {
@@ -94,7 +100,12 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
       });
 
       if (error) {
+        console.error('Supabase function error:', error);
         throw new Error(error.message);
+      }
+
+      if (!data || !data.response) {
+        throw new Error('No response received from AI');
       }
 
       const aiMessage: ChatMessage = {
@@ -106,19 +117,19 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
 
       setMessages(prev => [...prev, aiMessage]);
 
-      // Save to database
+      // Save to database if meeting ID exists
       if (meetingId) {
         await saveChatMessage(meetingId, message, data.response);
       }
       
     } catch (error) {
       console.error('Error getting AI response:', error);
-      toast.error('Failed to get AI response. Please check if Groq API key is configured.');
+      toast.error('Failed to get AI response. Please try again.');
       
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: 'Sorry, I encountered an error processing your request. Please make sure the Groq API key is properly configured.',
+        content: 'Sorry, I encountered an error while processing your request. Please make sure you have spoken during the recording so I have meeting content to analyze.',
         timestamp: new Date()
       };
       
@@ -157,7 +168,15 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     sendMessageToAI(query);
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   const hasTranscriptionData = transcriptionHistory.some(segment => segment.isFinal);
+  const transcriptionCount = transcriptionHistory.filter(s => s.isFinal).length;
 
   return (
     <Card className="h-full flex flex-col">
@@ -167,10 +186,10 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span>AI Assistant</span>
+            <span>AI Meeting Assistant</span>
           </div>
           <Badge variant="outline" className={hasTranscriptionData ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500"}>
-            {transcriptionHistory.filter(s => s.isFinal).length} segments
+            {transcriptionCount} segments
           </Badge>
         </CardTitle>
       </CardHeader>
@@ -185,7 +204,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickQuery(query)}
-                className="text-xs h-auto py-2 px-3 justify-start hover:bg-blue-50 hover:border-blue-200"
+                className="text-xs h-auto py-2 px-3 justify-start hover:bg-blue-50 hover:border-blue-200 text-left"
                 disabled={isProcessing}
               >
                 {query}
@@ -205,12 +224,17 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                   AI Assistant Ready
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                   {hasTranscriptionData 
-                    ? 'Ask questions about your meeting or use quick queries above'
-                    : 'Start recording to enable AI assistant'
+                    ? `I can analyze your meeting with ${transcriptionCount} transcribed segments`
+                    : 'Start speaking during the recording to enable AI analysis'
                   }
                 </p>
+                {hasTranscriptionData && (
+                  <p className="text-xs text-gray-500">
+                    Use the quick queries above or ask me anything about your meeting
+                  </p>
+                )}
               </div>
             )}
             
@@ -220,7 +244,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                  className={`max-w-[85%] rounded-lg px-4 py-3 ${
                     message.type === 'user'
                       ? 'bg-blue-500 text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
@@ -234,7 +258,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                       <User className="w-4 h-4 mt-1 flex-shrink-0" />
                     )}
                     <div className="flex-1">
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
                       <p className="text-xs opacity-70 mt-2">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
@@ -246,7 +270,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             
             {isProcessing && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3 max-w-[80%]">
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3 max-w-[85%]">
                   <div className="flex items-center space-x-2">
                     <Bot className="w-4 h-4" />
                     <div className="flex space-x-1">
@@ -254,6 +278,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                       <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                       <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                     </div>
+                    <span className="text-sm text-gray-600">Analyzing meeting...</span>
                   </div>
                 </div>
               </div>
@@ -268,8 +293,8 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             <Input
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-              placeholder={hasTranscriptionData ? "Ask about the meeting..." : "Start recording to enable chat"}
+              onKeyPress={handleKeyPress}
+              placeholder={hasTranscriptionData ? "Ask me about the meeting..." : "Start speaking to enable AI chat"}
               disabled={isProcessing || !hasTranscriptionData}
               className="flex-1"
             />
@@ -284,7 +309,12 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
           </div>
           {!hasTranscriptionData && (
             <p className="text-xs text-gray-500 mt-2">
-              Start recording to enable AI assistant
+              💡 Speak during the recording to enable AI assistant
+            </p>
+          )}
+          {hasTranscriptionData && (
+            <p className="text-xs text-green-600 mt-2">
+              ✅ Ready to analyze {transcriptionCount} transcribed segments
             </p>
           )}
         </div>

@@ -25,18 +25,25 @@ serve(async (req) => {
       throw new Error('GROQ_API_KEY not found in environment variables');
     }
 
+    console.log('Processing request:', { 
+      messageLength: message.length, 
+      contextLength: context?.length || 0,
+      hasContext: !!context 
+    });
+
     // Prepare the prompt with meeting context
     const systemPrompt = `You are an AI assistant that analyzes meeting transcriptions and answers questions about them. 
-    
-    Meeting Context:
-    ${context || 'No meeting context available yet.'}
-    
-    Instructions:
-    - Answer questions based only on the meeting transcription provided
-    - If the question cannot be answered from the transcription, say so clearly
-    - Be concise and helpful
-    - Extract specific information when requested
-    - Provide summaries, action items, or analysis as requested`;
+
+Meeting Transcription:
+${context || 'No meeting transcription available yet.'}
+
+Instructions:
+- Answer questions based ONLY on the meeting transcription provided above
+- If the transcription is empty or the question cannot be answered from it, clearly state that
+- Be concise, helpful, and accurate
+- Extract specific information, provide summaries, action items, or analysis as requested
+- Focus on the actual content discussed in the meeting
+- If asked about speakers, refer to them as mentioned in the transcription`;
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -52,17 +59,23 @@ serve(async (req) => {
         ],
         temperature: 0.3,
         max_tokens: 1000,
+        top_p: 0.9,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Groq API error:', errorText);
-      throw new Error(`Groq API error: ${response.status}`);
+      console.error('Groq API error:', response.status, errorText);
+      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    const aiResponse = data.choices[0]?.message?.content || 'Sorry, I could not generate a response.';
+    console.log('Groq response received:', { 
+      hasChoices: !!data.choices, 
+      choicesLength: data.choices?.length 
+    });
+
+    const aiResponse = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
 
     return new Response(JSON.stringify({ response: aiResponse }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -70,7 +83,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in groq-chat function:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      details: 'Please check the server logs for more information'
+    }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
