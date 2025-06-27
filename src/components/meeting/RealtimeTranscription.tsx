@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Mic, MicOff, Volume2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { AudioProcessor, SpeakerIdentifier } from '@/utils/audioProcessor';
 
 interface TranscriptionSegment {
   id: string;
@@ -30,9 +31,10 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
 }) => {
   const [segments, setSegments] = useState<TranscriptionSegment[]>([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [currentSpeaker, setCurrentSpeaker] = useState('Speaker 1');
-  const socketRef = useRef<WebSocket | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const [currentText, setCurrentText] = useState('');
+  const audioProcessorRef = useRef<AudioProcessor | null>(null);
+  const speakerIdentifierRef = useRef<SpeakerIdentifier | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
     if (isRecording && mediaStream && meetingId) {
@@ -48,55 +50,87 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
 
   const initializeTranscription = async () => {
     try {
-      // For demo purposes, we'll simulate transcription
-      // In production, integrate with Deepgram WebSocket API
-      startMockTranscription();
+      console.log('Initializing real-time transcription...');
+      
+      // Initialize speaker identifier
+      speakerIdentifierRef.current = new SpeakerIdentifier();
+      
+      // Initialize audio processor
+      audioProcessorRef.current = new AudioProcessor((audioData) => {
+        if (speakerIdentifierRef.current) {
+          const speaker = speakerIdentifierRef.current.identifySpeaker(audioData);
+          console.log('Current speaker:', speaker);
+        }
+      });
+
+      if (mediaStream) {
+        await audioProcessorRef.current.startProcessing(mediaStream);
+      }
+
+      // Initialize Web Speech API for transcription
+      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognitionRef.current = new SpeechRecognition();
+        
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = 'en-US';
+        
+        recognitionRef.current.onresult = (event) => {
+          let interimTranscript = '';
+          let finalTranscript = '';
+          
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            const confidence = event.results[i][0].confidence;
+            
+            if (event.results[i].isFinal) {
+              finalTranscript += transcript;
+              
+              // Create final segment
+              const currentSpeaker = speakerIdentifierRef.current?.identifySpeaker(new Float32Array()) || 'Speaker 1';
+              const segment: TranscriptionSegment = {
+                id: Date.now().toString() + Math.random(),
+                speaker: currentSpeaker,
+                text: transcript.trim(),
+                confidence: confidence || 0.85,
+                timestamp: new Date().toLocaleTimeString(),
+                isFinal: true
+              };
+              
+              setSegments(prev => {
+                const updated = [...prev, segment];
+                onTranscriptionUpdate(updated);
+                return updated;
+              });
+
+              // Save to database
+              if (meetingId) {
+                saveTranscriptionSegment(meetingId, segment);
+              }
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          
+          setCurrentText(interimTranscript);
+        };
+
+        recognitionRef.current.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+        };
+
+        recognitionRef.current.start();
+        setIsConnected(true);
+        
+        console.log('Speech recognition started');
+      } else {
+        console.error('Speech recognition not supported');
+      }
+
     } catch (error) {
       console.error('Error initializing transcription:', error);
     }
-  };
-
-  const startMockTranscription = () => {
-    // Mock transcription for demo
-    const mockSegments = [
-      { text: "Welcome everyone to today's meeting. Let's start with the agenda.", speaker: "Speaker 1" },
-      { text: "Thank you for joining. I'd like to discuss the quarterly results first.", speaker: "Speaker 2" },
-      { text: "The numbers look good this quarter. Revenue is up 15% compared to last quarter.", speaker: "Speaker 1" },
-      { text: "That's excellent news. What about our key performance indicators?", speaker: "Speaker 3" },
-      { text: "Customer satisfaction is at 92%, which is our highest ever.", speaker: "Speaker 2" },
-    ];
-
-    let index = 0;
-    const interval = setInterval(() => {
-      if (index < mockSegments.length && isRecording) {
-        const segment: TranscriptionSegment = {
-          id: Date.now().toString() + index,
-          speaker: mockSegments[index].speaker,
-          text: mockSegments[index].text,
-          confidence: 0.85 + Math.random() * 0.15,
-          timestamp: new Date().toLocaleTimeString(),
-          isFinal: true
-        };
-
-        setSegments(prev => {
-          const updated = [...prev, segment];
-          onTranscriptionUpdate(updated);
-          return updated;
-        });
-
-        // Save to database
-        if (meetingId) {
-          saveTranscriptionSegment(meetingId, segment);
-        }
-
-        index++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 3000 + Math.random() * 2000); // Random intervals between 3-5 seconds
-
-    // Store interval reference for cleanup
-    return () => clearInterval(interval);
   };
 
   const saveTranscriptionSegment = async (meetingId: string, segment: TranscriptionSegment) => {
@@ -119,15 +153,16 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
   };
 
   const cleanupTranscription = () => {
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
+    if (audioProcessorRef.current) {
+      audioProcessorRef.current.stop();
+      audioProcessorRef.current = null;
     }
     setIsConnected(false);
+    setCurrentText('');
   };
 
   const getSpeakerColor = (speaker: string) => {
@@ -149,7 +184,7 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
             <span>Live Transcription</span>
           </div>
           <div className="flex items-center space-x-2">
-            {isRecording ? (
+            {isRecording && isConnected ? (
               <Badge variant="default" className="bg-green-600">
                 <Volume2 className="w-3 h-3 mr-1" />
                 Active
@@ -165,7 +200,7 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-80 p-4">
-          {segments.length > 0 ? (
+          {segments.length > 0 || currentText ? (
             <div className="space-y-4">
               {segments.map((segment) => (
                 <div key={segment.id} className="space-y-2">
@@ -184,16 +219,30 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
                   </p>
                 </div>
               ))}
+              
+              {currentText && (
+                <div className="space-y-2 opacity-70">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">
+                      Speaking...
+                    </Badge>
+                    <span className="text-xs text-gray-500">Live</span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 italic leading-relaxed">
+                    {currentText}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Mic className="w-12 h-12 text-gray-400 mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {isRecording ? 'Listening...' : 'Ready to transcribe'}
+                {isRecording && isConnected ? 'Listening...' : 'Ready to transcribe'}
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-300">
-                {isRecording 
-                  ? 'Transcription will appear here as people speak'
+                {isRecording && isConnected
+                  ? 'Speak to see live transcription'
                   : 'Start recording to begin live transcription'
                 }
               </p>

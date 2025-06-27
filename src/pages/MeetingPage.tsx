@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MeetingRecorder } from '@/components/meeting/MeetingRecorder';
 import { RealtimeTranscription } from '@/components/meeting/RealtimeTranscription';
+import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
+import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,6 +40,7 @@ export const MeetingPage = () => {
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [meetingStartTime] = useState(Date.now());
 
   useEffect(() => {
     if (id && user) {
@@ -72,11 +75,13 @@ export const MeetingPage = () => {
   const handleStartRecording = (stream: MediaStream) => {
     setMediaStream(stream);
     setIsRecording(true);
+    console.log('Recording started with stream:', stream);
   };
 
   const handleStopRecording = async () => {
     setIsRecording(false);
     setMediaStream(null);
+    console.log('Recording stopped');
 
     // Update meeting status
     if (meeting) {
@@ -91,12 +96,15 @@ export const MeetingPage = () => {
 
       if (error) {
         console.error('Error updating meeting:', error);
+      } else {
+        toast.success('Meeting completed and saved!');
       }
     }
   };
 
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
     setTranscriptionSegments(segments);
+    console.log('Transcription updated:', segments.length, 'segments');
   };
 
   if (loading) {
@@ -192,35 +200,23 @@ export const MeetingPage = () => {
 
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0">
-                    <CardContent className="p-4 h-full">
-                      <div className="flex items-center justify-center h-full">
-                        <div className="text-center">
-                          <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                            AI Chat Assistant
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-300">
-                            Ask questions about your meeting content in real-time
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
+                    <div className="p-4 h-full">
+                      <LiveAIChatbot 
+                        meetingId={meeting.id}
+                        transcriptionHistory={transcriptionSegments}
+                      />
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="analytics" className="h-full m-0">
-                    <CardContent className="p-4 h-full">
-                      <div className="flex items-center justify-center h-full">
-                        <div className="text-center">
-                          <BarChart3 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                            Meeting Analytics
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-300">
-                            Real-time insights and speaker analytics will appear here
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
+                    <div className="p-4 h-full">
+                      <LiveMeetingAnalytics 
+                        meetingId={meeting.id}
+                        transcriptionSegments={transcriptionSegments}
+                        isRecording={isRecording}
+                        startTime={meetingStartTime}
+                      />
+                    </div>
                   </TabsContent>
 
                   <TabsContent value="participants" className="h-full m-0">
@@ -231,25 +227,35 @@ export const MeetingPage = () => {
                         </h3>
                         {transcriptionSegments.length > 0 ? (
                           <div className="space-y-3">
-                            {Array.from(new Set(transcriptionSegments.map(s => s.speaker))).map((speaker) => (
-                              <div key={speaker} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                                  <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                            {Array.from(new Set(transcriptionSegments.filter(s => s.isFinal).map(s => s.speaker))).map((speaker) => {
+                              const speakerSegments = transcriptionSegments.filter(s => s.speaker === speaker && s.isFinal);
+                              const totalWords = speakerSegments.reduce((sum, s) => sum + s.text.split(' ').length, 0);
+                              const avgConfidence = Math.round(speakerSegments.reduce((sum, s) => sum + s.confidence, 0) / speakerSegments.length * 100);
+                              
+                              return (
+                                <div key={speaker} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                                    <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900 dark:text-white">{speaker}</p>
+                                    <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-300">
+                                      <span>{speakerSegments.length} segments</span>
+                                      <span>{totalWords} words</span>
+                                      <span>{avgConfidence}% accuracy</span>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="font-medium text-gray-900 dark:text-white">{speaker}</p>
-                                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                                    {transcriptionSegments.filter(s => s.speaker === speaker).length} segments
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ) : (
                           <div className="text-center py-8">
                             <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                             <p className="text-sm text-gray-600 dark:text-gray-300">
-                              Speakers will appear here once transcription starts
+                              {isRecording 
+                                ? 'Speakers will appear here as they talk' 
+                                : 'Start recording to identify speakers'}
                             </p>
                           </div>
                         )}
