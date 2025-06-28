@@ -41,7 +41,7 @@ const containerVariants = {
       delayChildren: 0.2,
       staggerChildren: 0.15,
       duration: 0.8,
-      ease: [0.25, 0.46, 0.45, 0.94]
+      ease: "easeOut" as const
     }
   }
 };
