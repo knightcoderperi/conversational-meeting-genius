@@ -50,7 +50,7 @@ const itemVariants = {
     y: 0,
     opacity: 1,
     transition: {
-      type: "spring",
+      type: "spring" as const,
       damping: 12,
       stiffness: 100
     }
@@ -179,7 +179,8 @@ export const MeetingAnalyticsPage = () => {
     <div 
       className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden"
       style={{
-        background: `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(99, 102, 241, 0.1) 0%, transparent 50%)`
+        background: `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(99, 102, 241, 0.1) 0%, transparent 50%)`,
+        backgroundImage: `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(99, 102, 241, 0.1) 0%, transparent 50%)`
       }}
     >
       {/* Floating particles background */}
@@ -210,7 +211,7 @@ export const MeetingAnalyticsPage = () => {
         className="bg-black/20 backdrop-blur-xl border-b border-white/10 shadow-2xl relative z-10"
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", damping: 20 }}
+        transition={{ type: "spring" as const, damping: 20 }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20">
@@ -221,7 +222,7 @@ export const MeetingAnalyticsPage = () => {
               >
                 <motion.div
                   whileHover={{ x: -5 }}
-                  transition={{ type: "spring", stiffness: 400 }}
+                  transition={{ type: "spring" as const, stiffness: 400 }}
                 >
                   <ArrowLeft className="w-6 h-6 mr-3 group-hover:animate-pulse" />
                 </motion.div>
