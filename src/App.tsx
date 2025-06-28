@@ -9,6 +9,7 @@ import { AuthPage } from "@/pages/AuthPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { NewMeetingPage } from "@/pages/NewMeetingPage";
 import { MeetingPage } from "@/pages/MeetingPage";
+import { EnhancedMeetingPage } from "@/pages/EnhancedMeetingPage";
 import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,14 @@ const App = () => (
             />
             <Route 
               path="/meeting/:id" 
+              element={
+                <ProtectedRoute>
+                  <EnhancedMeetingPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/meeting/:id/classic" 
               element={
                 <ProtectedRoute>
                   <MeetingPage />
