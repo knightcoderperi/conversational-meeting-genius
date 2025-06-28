@@ -100,6 +100,11 @@ export const EnhancedMeetingPage = () => {
         console.error('Error updating meeting:', error);
       } else {
         toast.success('✅ Meeting completed and saved successfully!');
+        
+        // Redirect to analytics page after 2 seconds
+        setTimeout(() => {
+          navigate(`/meeting/${meeting.id}/analytics`);
+        }, 2000);
       }
     }
   };

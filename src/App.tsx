@@ -10,6 +10,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { NewMeetingPage } from "@/pages/NewMeetingPage";
 import { MeetingPage } from "@/pages/MeetingPage";
 import { EnhancedMeetingPage } from "@/pages/EnhancedMeetingPage";
+import { MeetingAnalyticsPage } from "@/pages/MeetingAnalyticsPage";
 import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <EnhancedMeetingPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/meeting/:id/analytics" 
+              element={
+                <ProtectedRoute>
+                  <MeetingAnalyticsPage />
                 </ProtectedRoute>
               } 
             />
