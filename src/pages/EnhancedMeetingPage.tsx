@@ -101,10 +101,10 @@ export const EnhancedMeetingPage = () => {
       } else {
         toast.success('✅ Meeting completed and saved successfully!');
         
-        // Redirect to analytics page after 2 seconds
+        // Auto-redirect to analytics page immediately with a beautiful transition
         setTimeout(() => {
           navigate(`/meeting/${meeting.id}/analytics`);
-        }, 2000);
+        }, 1000);
       }
     }
   };

@@ -7,8 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Users, Clock, MessageSquare, TrendingUp, BarChart3, Crown, Zap } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { PremiumUpgradeModal } from '@/components/ui/premium-upgrade-modal';
+import { ArrowLeft, Users, Clock, MessageSquare, TrendingUp, BarChart3, Crown, Zap, Star, Brain, Sparkles, Gem } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Area, AreaChart } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 
@@ -31,6 +33,30 @@ interface SpeakerStats {
   avgConfidence: number;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      delayChildren: 0.1,
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      type: "spring",
+      damping: 12,
+      stiffness: 100
+    }
+  }
+};
+
 export const MeetingAnalyticsPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -40,6 +66,16 @@ export const MeetingAnalyticsPage = () => {
   const [totalWords, setTotalWords] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   useEffect(() => {
     if (id && user) {
@@ -113,317 +149,467 @@ export const MeetingAnalyticsPage = () => {
     }
   };
 
-  const handleUpgrade = async () => {
-    try {
-      const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
-        body: {
-          amount: 2999, // ₹29.99
-          currency: 'INR',
-          receipt: `upgrade_${user?.id}_${Date.now()}`,
-          notes: {
-            plan: 'pro_monthly',
-            user_id: user?.id
-          }
-        }
-      });
-
-      if (error) throw error;
-
-      // Initialize Razorpay
-      const options = {
-        key: 'your_razorpay_key_id', // You'll need to add this
-        amount: data.amount,
-        currency: data.currency,
-        name: 'Meeting AI Pro',
-        description: 'Upgrade to Pro Plan',
-        order_id: data.id,
-        handler: async (response: any) => {
-          toast.success('Payment successful! Welcome to Pro!');
-          // Update user subscription status
-        },
-        prefill: {
-          name: user?.user_metadata?.full_name || '',
-          email: user?.email || '',
-        },
-        theme: {
-          color: '#3B82F6'
-        }
-      };
-
-      const razorpay = new (window as any).Razorpay(options);
-      razorpay.open();
-    } catch (error) {
-      console.error('Payment error:', error);
-      toast.error('Failed to initialize payment');
-    }
-  };
-
-  const chartColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
+  const chartColors = ['#6366f1', '#8b5cf6', '#ec4899', '#06b6d4', '#10b981', '#f59e0b'];
+  const glowColors = ['#6366f1', '#8b5cf6', '#ec4899', '#06b6d4', '#10b981', '#f59e0b'];
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center">
+        <motion.div
+          className="text-center"
+          initial={{ opacity: 0, scale: 0.5 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <motion.div
+            className="w-20 h-20 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-6"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          >
+            <BarChart3 className="w-10 h-10 text-white" />
+          </motion.div>
+          <h2 className="text-2xl font-bold text-white mb-2">Loading Analytics</h2>
+          <p className="text-white/60">Analyzing your meeting data...</p>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-      {/* Header */}
-      <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-b border-slate-200/50 shadow-lg">
+    <div 
+      className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden"
+      style={{
+        background: `radial-gradient(circle at ${mousePosition.x}px ${mousePosition.y}px, rgba(99, 102, 241, 0.1) 0%, transparent 50%)`
+      }}
+    >
+      {/* Floating particles background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {Array.from({ length: 50 }).map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-blue-400 rounded-full opacity-30"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+            }}
+            animate={{
+              y: [0, -100, 0],
+              opacity: [0.3, 1, 0.3],
+            }}
+            transition={{
+              duration: 3 + Math.random() * 2,
+              repeat: Infinity,
+              delay: Math.random() * 2,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Enhanced Header */}
+      <motion.header
+        className="bg-black/20 backdrop-blur-xl border-b border-white/10 shadow-2xl relative z-10"
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", damping: 20 }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-4">
-              <Link to="/" className="flex items-center text-gray-600 hover:text-gray-900 transition-colors">
-                <ArrowLeft className="w-5 h-5 mr-2" />
-                Dashboard
+          <div className="flex items-center justify-between h-20">
+            <div className="flex items-center space-x-6">
+              <Link 
+                to="/" 
+                className="flex items-center text-white/80 hover:text-white transition-all duration-300 hover:scale-105 group"
+              >
+                <motion.div
+                  whileHover={{ x: -5 }}
+                  transition={{ type: "spring", stiffness: 400 }}
+                >
+                  <ArrowLeft className="w-6 h-6 mr-3 group-hover:animate-pulse" />
+                </motion.div>
+                <span className="text-lg font-medium">Dashboard</span>
               </Link>
-              <div className="border-l border-gray-300 h-6"></div>
+              <div className="border-l border-white/20 h-8"></div>
               <div>
-                <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                <motion.h1 
+                  className="text-2xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent"
+                  animate={{ backgroundPosition: ["0%", "100%", "0%"] }}
+                  transition={{ duration: 5, repeat: Infinity }}
+                >
                   Meeting Analytics
-                </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-300">
+                </motion.h1>
+                <p className="text-white/60 font-medium">
                   {meeting?.title}
                 </p>
               </div>
             </div>
-            <Button
-              onClick={() => setShowUpgrade(true)}
-              className="bg-gradient-to-r from-yellow-500 to-orange-600 text-white border-0 hover:shadow-lg transition-all"
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              <Crown className="w-4 h-4 mr-2" />
-              Upgrade to Pro
-            </Button>
+              <Button
+                onClick={() => setShowUpgrade(true)}
+                className="relative bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 text-white border-0 hover:shadow-2xl hover:shadow-orange-500/50 transition-all duration-300 px-6 py-3 rounded-xl font-bold overflow-hidden group"
+              >
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                />
+                <span className="relative z-10 flex items-center">
+                  <Crown className="w-5 h-5 mr-2" />
+                  Upgrade to Pro
+                </span>
+              </Button>
+            </motion.div>
           </div>
         </div>
-      </header>
+      </motion.header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 bg-white/60 backdrop-blur-sm">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="speakers">Speaker Analysis</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="insights">AI Insights</TabsTrigger>
-          </TabsList>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+        >
+          <Tabs defaultValue="overview" className="space-y-8">
+            <motion.div variants={itemVariants}>
+              <TabsList className="grid w-full grid-cols-4 bg-black/20 backdrop-blur-xl border border-white/10 rounded-2xl p-2">
+                {['overview', 'speakers', 'timeline', 'insights'].map((tab, index) => (
+                  <TabsTrigger 
+                    key={tab}
+                    value={tab} 
+                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-500 data-[state=active]:text-white text-white/70 hover:text-white/90 transition-all duration-300 rounded-xl font-medium capitalize"
+                  >
+                    {tab}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </motion.div>
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <Clock className="w-8 h-8" />
-                    <div>
-                      <p className="text-blue-100">Duration</p>
-                      <p className="text-2xl font-bold">
-                        {Math.floor((meeting?.duration || 0) / 60)}m {(meeting?.duration || 0) % 60}s
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            <TabsContent value="overview" className="space-y-8">
+              {/* Enhanced Summary Cards */}
+              <motion.div 
+                className="grid grid-cols-1 md:grid-cols-4 gap-6"
+                variants={containerVariants}
+              >
+                {[
+                  { icon: Clock, label: 'Duration', value: `${Math.floor((meeting?.duration || 0) / 60)}m ${(meeting?.duration || 0) % 60}s`, color: 'from-blue-500 to-cyan-500' },
+                  { icon: MessageSquare, label: 'Total Words', value: totalWords.toLocaleString(), color: 'from-green-500 to-emerald-500' },
+                  { icon: Users, label: 'Active Speakers', value: speakerStats.length.toString(), color: 'from-purple-500 to-pink-500' },
+                  { icon: TrendingUp, label: 'Engagement', value: '94%', color: 'from-orange-500 to-red-500' },
+                ].map((stat, index) => (
+                  <motion.div
+                    key={stat.label}
+                    variants={itemVariants}
+                    whileHover={{ scale: 1.05, rotateY: 5 }}
+                    className="group"
+                  >
+                    <Card className={`bg-gradient-to-br ${stat.color} text-white border-0 shadow-2xl hover:shadow-3xl transition-all duration-500 relative overflow-hidden`}>
+                      <motion.div
+                        className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                      />
+                      <CardContent className="p-8 relative z-10">
+                        <div className="flex items-center space-x-4">
+                          <motion.div
+                            className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center"
+                            whileHover={{ rotate: 360 }}
+                            transition={{ duration: 0.5 }}
+                          >
+                            <stat.icon className="w-8 h-8" />
+                          </motion.div>
+                          <div>
+                            <p className="text-white/80 text-sm font-medium">{stat.label}</p>
+                            <motion.p 
+                              className="text-3xl font-bold"
+                              animate={{ scale: [1, 1.05, 1] }}
+                              transition={{ duration: 2, repeat: Infinity }}
+                            >
+                              {stat.value}
+                            </motion.p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </motion.div>
 
-              <Card className="bg-gradient-to-r from-green-500 to-green-600 text-white border-0">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <MessageSquare className="w-8 h-8" />
-                    <div>
-                      <p className="text-green-100">Total Words</p>
-                      <p className="text-2xl font-bold">{totalWords.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Enhanced Charts */}
+              <motion.div 
+                className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+                variants={containerVariants}
+              >
+                <motion.div variants={itemVariants}>
+                  <Card className="bg-black/20 backdrop-blur-xl border border-white/10 shadow-2xl">
+                    <CardHeader>
+                      <CardTitle className="text-white text-xl font-bold">Speaking Time Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={350}>
+                        <BarChart data={speakerStats}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                          <XAxis dataKey="name" stroke="#fff" />
+                          <YAxis stroke="#fff" />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'rgba(0,0,0,0.8)', 
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              borderRadius: '12px',
+                              color: '#fff'
+                            }} 
+                          />
+                          <Bar dataKey="percentage" fill="url(#colorGradient)" radius={[4, 4, 0, 0]} />
+                          <defs>
+                            <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#6366f1" />
+                              <stop offset="100%" stopColor="#8b5cf6" />
+                            </linearGradient>
+                          </defs>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </motion.div>
 
-              <Card className="bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <Users className="w-8 h-8" />
-                    <div>
-                      <p className="text-purple-100">Active Speakers</p>
-                      <p className="text-2xl font-bold">{speakerStats.length}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                <motion.div variants={itemVariants}>
+                  <Card className="bg-black/20 backdrop-blur-xl border border-white/10 shadow-2xl">
+                    <CardHeader>
+                      <CardTitle className="text-white text-xl font-bold">Word Count Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={350}>
+                        <PieChart>
+                          <Pie
+                            data={speakerStats}
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={120}
+                            dataKey="words"
+                            nameKey="name"
+                            stroke="rgba(255,255,255,0.1)"
+                            strokeWidth={2}
+                          >
+                            {speakerStats.map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={chartColors[index % chartColors.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: 'rgba(0,0,0,0.8)', 
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              borderRadius: '12px',
+                              color: '#fff'
+                            }} 
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </motion.div>
+            </TabsContent>
 
-              <Card className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-3">
-                    <TrendingUp className="w-8 h-8" />
-                    <div>
-                      <p className="text-orange-100">Engagement</p>
-                      <p className="text-2xl font-bold">94%</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <TabsContent value="speakers" className="space-y-6">
+              <motion.div 
+                className="grid gap-6"
+                variants={containerVariants}
+              >
+                {speakerStats.map((speaker, index) => (
+                  <motion.div
+                    key={speaker.name}
+                    variants={itemVariants}
+                    whileHover={{ scale: 1.02, x: 10 }}
+                    className="group"
+                  >
+                    <Card className="bg-black/20 backdrop-blur-xl border border-white/10 shadow-2xl hover:shadow-3xl transition-all duration-500 relative overflow-hidden">
+                      <motion.div
+                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                        style={{ 
+                          background: `linear-gradient(45deg, ${chartColors[index % chartColors.length]}20, transparent)` 
+                        }}
+                      />
+                      <CardContent className="p-8 relative z-10">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-6">
+                            <motion.div 
+                              className="w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl relative"
+                              style={{ backgroundColor: chartColors[index % chartColors.length] }}
+                              whileHover={{ rotate: 360, scale: 1.1 }}
+                              transition={{ duration: 0.5 }}
+                            >
+                              {speaker.name.charAt(0).toUpperCase()}
+                              <motion.div
+                                className="absolute inset-0 rounded-full"
+                                style={{ 
+                                  boxShadow: `0 0 30px ${chartColors[index % chartColors.length]}60` 
+                                }}
+                                animate={{ 
+                                  boxShadow: [
+                                    `0 0 30px ${chartColors[index % chartColors.length]}60`,
+                                    `0 0 50px ${chartColors[index % chartColors.length]}80`,
+                                    `0 0 30px ${chartColors[index % chartColors.length]}60`
+                                  ]
+                                }}
+                                transition={{ duration: 2, repeat: Infinity }}
+                              />
+                            </motion.div>
+                            <div>
+                              <h3 className="text-2xl font-bold text-white mb-2">{speaker.name}</h3>
+                              <div className="flex items-center space-x-6 text-white/70">
+                                <span className="flex items-center space-x-2">
+                                  <MessageSquare className="w-4 h-4" />
+                                  <span>{speaker.segments} segments</span>
+                                </span>
+                                <span className="flex items-center space-x-2">
+                                  <Zap className="w-4 h-4" />
+                                  <span>{speaker.words} words</span>
+                                </span>
+                                <span className="flex items-center space-x-2">
+                                  <Star className="w-4 h-4" />
+                                  <span>{speaker.avgConfidence}% accuracy</span>
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <motion.p 
+                              className="text-4xl font-bold text-white mb-2"
+                              animate={{ scale: [1, 1.1, 1] }}
+                              transition={{ duration: 3, repeat: Infinity }}
+                            >
+                              {speaker.percentage}%
+                            </motion.p>
+                            <p className="text-white/60">speaking time</p>
+                          </div>
+                        </div>
+                        <div className="mt-6">
+                          <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
+                            <motion.div 
+                              className="h-3 rounded-full transition-all duration-1000"
+                              style={{ 
+                                background: `linear-gradient(90deg, ${chartColors[index % chartColors.length]}, ${chartColors[index % chartColors.length]}80)`,
+                                width: `${speaker.percentage}%`
+                              }}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${speaker.percentage}%` }}
+                              transition={{ duration: 1, delay: index * 0.2 }}
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </TabsContent>
 
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-                <CardHeader>
-                  <CardTitle>Speaking Time Distribution</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={speakerStats}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="percentage" fill="#3B82F6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-                <CardHeader>
-                  <CardTitle>Word Count by Speaker</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={speakerStats}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        dataKey="words"
-                        nameKey="name"
+            <TabsContent value="timeline">
+              <motion.div variants={itemVariants}>
+                <Card className="bg-black/20 backdrop-blur-xl border border-white/10 shadow-2xl">
+                  <CardContent className="p-12">
+                    <div className="text-center py-16">
+                      <motion.div
+                        className="w-24 h-24 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mx-auto mb-8"
+                        animate={{ 
+                          rotate: 360,
+                          scale: [1, 1.1, 1],
+                        }}
+                        transition={{ 
+                          rotate: { duration: 10, repeat: Infinity, ease: "linear" },
+                          scale: { duration: 2, repeat: Infinity }
+                        }}
                       >
-                        {speakerStats.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="speakers" className="space-y-6">
-            <div className="grid gap-4">
-              {speakerStats.map((speaker, index) => (
-                <Card key={speaker.name} className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div 
-                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                          style={{ backgroundColor: chartColors[index % chartColors.length] }}
+                        <BarChart3 className="w-12 h-12 text-white" />
+                      </motion.div>
+                      <motion.h3 
+                        className="text-3xl font-bold text-white mb-4"
+                        animate={{ opacity: [0.8, 1, 0.8] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        Timeline Analysis
+                      </motion.h3>
+                      <p className="text-white/60 text-lg mb-8 max-w-md mx-auto">
+                        Detailed timeline analysis with engagement patterns, topic changes, and speaker transitions available in Pro plan
+                      </p>
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        <Button 
+                          onClick={() => setShowUpgrade(true)} 
+                          className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white border-0 hover:shadow-2xl hover:shadow-purple-500/50 transition-all duration-300 px-8 py-4 text-lg font-bold rounded-xl"
                         >
-                          {speaker.name.charAt(0)}
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold">{speaker.name}</h3>
-                          <p className="text-gray-600">{speaker.segments} segments • {speaker.words} words</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-blue-600">{speaker.percentage}%</p>
-                        <p className="text-sm text-gray-500">{speaker.avgConfidence}% accuracy</p>
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="h-2 rounded-full transition-all duration-300"
-                          style={{ 
-                            width: `${speaker.percentage}%`,
-                            backgroundColor: chartColors[index % chartColors.length]
-                          }}
-                        ></div>
-                      </div>
+                          <Crown className="w-5 h-5 mr-2" />
+                          Unlock Timeline Analysis
+                        </Button>
+                      </motion.div>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          </TabsContent>
+              </motion.div>
+            </TabsContent>
 
-          <TabsContent value="timeline">
-            <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-              <CardContent className="p-6">
-                <div className="text-center py-12">
-                  <BarChart3 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">Timeline Analysis</h3>
-                  <p className="text-gray-600 mb-4">Detailed timeline analysis available in Pro plan</p>
-                  <Button onClick={handleUpgrade} className="bg-gradient-to-r from-blue-500 to-purple-600">
-                    <Crown className="w-4 h-4 mr-2" />
-                    Upgrade Now
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="insights">
-            <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-lg">
-              <CardContent className="p-6">
-                <div className="text-center py-12">
-                  <Zap className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">AI-Powered Insights</h3>
-                  <p className="text-gray-600 mb-4">Get detailed AI analysis and recommendations</p>
-                  <Button onClick={handleUpgrade} className="bg-gradient-to-r from-blue-500 to-purple-600">
-                    <Crown className="w-4 h-4 mr-2" />
-                    Unlock AI Insights
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="insights">
+              <motion.div variants={itemVariants}>
+                <Card className="bg-black/20 backdrop-blur-xl border border-white/10 shadow-2xl">
+                  <CardContent className="p-12">
+                    <div className="text-center py-16">
+                      <motion.div
+                        className="w-24 h-24 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-8"
+                        animate={{ 
+                          rotate: [0, 360],
+                          scale: [1, 1.2, 1],
+                        }}
+                        transition={{ 
+                          rotate: { duration: 8, repeat: Infinity, ease: "linear" },
+                          scale: { duration: 3, repeat: Infinity }
+                        }}
+                      >
+                        <Brain className="w-12 h-12 text-white" />
+                      </motion.div>
+                      <motion.h3 
+                        className="text-3xl font-bold text-white mb-4"
+                        animate={{ opacity: [0.8, 1, 0.8] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        AI-Powered Insights
+                      </motion.h3>
+                      <p className="text-white/60 text-lg mb-8 max-w-lg mx-auto">
+                        Get advanced AI analysis including sentiment analysis, topic clustering, decision tracking, and personalized recommendations
+                      </p>
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        <Button 
+                          onClick={() => setShowUpgrade(true)} 
+                          className="bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white border-0 hover:shadow-2xl hover:shadow-emerald-500/50 transition-all duration-300 px-8 py-4 text-lg font-bold rounded-xl"
+                        >
+                          <Sparkles className="w-5 h-5 mr-2" />
+                          Unlock AI Insights
+                        </Button>
+                      </motion.div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </TabsContent>
+          </Tabs>
+        </motion.div>
       </div>
 
-      {/* Upgrade Modal */}
-      {showUpgrade && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md m-4">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Crown className="w-5 h-5 mr-2 text-yellow-500" />
-                Upgrade to Pro
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-center">
-                <p className="text-3xl font-bold">₹29.99/month</p>
-                <p className="text-gray-600">Unlimited meetings & advanced analytics</p>
-              </div>
-              <ul className="space-y-2">
-                <li className="flex items-center">
-                  <Zap className="w-4 h-4 mr-2 text-green-500" />
-                  Unlimited meeting duration
-                </li>
-                <li className="flex items-center">
-                  <BarChart3 className="w-4 h-4 mr-2 text-blue-500" />
-                  Advanced analytics & insights
-                </li>
-                <li className="flex items-center">
-                  <Users className="w-4 h-4 mr-2 text-purple-500" />
-                  Speaker identification
-                </li>
-              </ul>
-              <div className="flex space-x-2">
-                <Button variant="outline" onClick={() => setShowUpgrade(false)} className="flex-1">
-                  Cancel
-                </Button>
-                <Button onClick={handleUpgrade} className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600">
-                  Upgrade Now
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <PremiumUpgradeModal
+        isOpen={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        onUpgrade={() => {
+          toast.success('🎉 Welcome to Pro! All features unlocked!');
+          setShowUpgrade(false);
+        }}
+      />
     </div>
   );
 };
