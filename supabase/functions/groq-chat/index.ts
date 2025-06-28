@@ -25,25 +25,49 @@ serve(async (req) => {
       throw new Error('GROQ_API_KEY not found in environment variables');
     }
 
-    console.log('Processing request:', { 
+    console.log('Processing Ultimate AI request:', { 
       messageLength: message.length, 
       contextLength: context?.length || 0,
       hasContext: !!context 
     });
 
-    // Prepare the prompt with meeting context
-    const systemPrompt = `You are an AI assistant that analyzes meeting transcriptions and answers questions about them. 
+    // Determine if this is a meeting-related query or general query
+    const isMeetingQuery = context && context.trim().length > 0;
+    
+    let systemPrompt = '';
+    
+    if (isMeetingQuery) {
+      systemPrompt = `You are an advanced AI assistant that specializes in analyzing meeting transcriptions and providing comprehensive insights.
 
 Meeting Transcription:
-${context || 'No meeting transcription available yet.'}
+${context}
 
 Instructions:
-- Answer questions based ONLY on the meeting transcription provided above
-- If the transcription is empty or the question cannot be answered from it, clearly state that
-- Be concise, helpful, and accurate
-- Extract specific information, provide summaries, action items, or analysis as requested
-- Focus on the actual content discussed in the meeting
-- If asked about speakers, refer to them as mentioned in the transcription`;
+- Analyze the meeting transcription thoroughly and provide detailed, actionable insights
+- Extract specific information, provide summaries, action items, decisions, and analysis as requested
+- Identify key themes, patterns, and important discussion points
+- If asked about speakers, refer to them exactly as mentioned in the transcription
+- Provide structured responses with clear headings and bullet points when appropriate
+- Be comprehensive yet concise, focusing on the most valuable information
+- If the transcription seems incomplete or the question cannot be fully answered, clearly state that and provide what insights you can`;
+    } else {
+      systemPrompt = `You are an expert AI assistant with comprehensive knowledge across all domains. You can:
+
+- Write detailed, well-structured articles on any topic
+- Provide expert advice and best practices
+- Explain complex concepts in an accessible way
+- Offer practical tips and actionable insights
+- Create comprehensive guides and tutorials
+- Analyze trends and provide strategic recommendations
+
+Instructions:
+- Provide thorough, accurate, and helpful responses
+- Structure your responses with clear headings and sections when appropriate
+- Include practical examples and actionable advice
+- Be comprehensive yet accessible
+- If writing an article, include an engaging introduction, well-organized body with subheadings, and a compelling conclusion
+- Always aim to provide maximum value and actionable insights`;
+    }
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -52,14 +76,16 @@ Instructions:
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama3-8b-8192',
+        model: 'llama3-70b-8192', // Use the more powerful model for better responses
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: message }
         ],
-        temperature: 0.3,
-        max_tokens: 1000,
+        temperature: isMeetingQuery ? 0.3 : 0.7, // Lower temperature for meeting analysis, higher for creative content
+        max_tokens: 2000, // Increased for more comprehensive responses
         top_p: 0.9,
+        frequency_penalty: 0.1,
+        presence_penalty: 0.1,
       }),
     });
 
@@ -70,9 +96,10 @@ Instructions:
     }
 
     const data = await response.json();
-    console.log('Groq response received:', { 
+    console.log('Ultimate AI response received:', { 
       hasChoices: !!data.choices, 
-      choicesLength: data.choices?.length 
+      choicesLength: data.choices?.length,
+      queryType: isMeetingQuery ? 'meeting' : 'general'
     });
 
     const aiResponse = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
@@ -82,7 +109,7 @@ Instructions:
     });
 
   } catch (error) {
-    console.error('Error in groq-chat function:', error);
+    console.error('Error in ultimate groq-chat function:', error);
     return new Response(JSON.stringify({ 
       error: error.message,
       details: 'Please check the server logs for more information'

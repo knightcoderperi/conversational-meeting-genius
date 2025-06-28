@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MeetingControlCenter } from '@/components/meeting/MeetingControlCenter';
-import { EnhancedRealtimeTranscription } from '@/components/meeting/EnhancedRealtimeTranscription';
-import { SuperchargedAIChatbot } from '@/components/meeting/SuperchargedAIChatbot';
+import { EnhancedSpeakerTranscription } from '@/components/meeting/EnhancedSpeakerTranscription';
+import { UltimateChatbot } from '@/components/meeting/UltimateChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -111,7 +111,12 @@ export const EnhancedMeetingPage = () => {
 
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
     setTranscriptionSegments(segments);
-    console.log('📝 Transcription updated:', segments.length, 'segments');
+    console.log('📝 Enhanced transcription updated:', segments.length, 'segments');
+    
+    // Show success toast for significant updates
+    if (segments.length > 0 && segments.length % 5 === 0) {
+      toast.success(`🎯 ${segments.length} segments transcribed with AI speaker detection!`);
+    }
   };
 
   if (loading) {
@@ -186,7 +191,7 @@ export const EnhancedMeetingPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Recording & Transcription */}
+          {/* Left Column - Recording & Enhanced Transcription */}
           <div className="space-y-6">
             <MeetingControlCenter
               onStartRecording={handleStartRecording}
@@ -195,7 +200,7 @@ export const EnhancedMeetingPage = () => {
               isRecording={isRecording}
             />
             
-            <EnhancedRealtimeTranscription
+            <EnhancedSpeakerTranscription
               meetingId={meeting.id}
               isRecording={isRecording}
               mediaStream={mediaStream}
@@ -211,7 +216,7 @@ export const EnhancedMeetingPage = () => {
                   <TabsList className="grid w-full grid-cols-3 bg-white/60 dark:bg-slate-700/60 backdrop-blur-sm">
                     <TabsTrigger value="chat" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-600 data-[state=active]:text-white">
                       <Brain className="w-4 h-4" />
-                      <span>AI Chat</span>
+                      <span>Ultimate AI</span>
                     </TabsTrigger>
                     <TabsTrigger value="analytics" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white">
                       <BarChart3 className="w-4 h-4" />
@@ -227,7 +232,7 @@ export const EnhancedMeetingPage = () => {
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0">
                     <div className="p-4 h-full">
-                      <SuperchargedAIChatbot 
+                      <UltimateChatbot 
                         meetingId={meeting.id}
                         transcriptionHistory={transcriptionSegments}
                       />
