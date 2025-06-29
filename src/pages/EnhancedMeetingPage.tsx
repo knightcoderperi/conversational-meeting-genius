@@ -26,9 +26,11 @@ interface Meeting {
 interface TranscriptionSegment {
   id: string;
   speaker: string;
+  speakerName: string;
   text: string;
   confidence: number;
   timestamp: string;
+  startTime: number;
   isFinal: boolean;
 }
 
@@ -111,12 +113,21 @@ export const EnhancedMeetingPage = () => {
   };
 
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
-    setTranscriptionSegments(segments);
-    console.log('📝 Enhanced transcription updated:', segments.length, 'segments');
+    // Normalize the segments to ensure consistent interface
+    const normalizedSegments = segments.map(segment => ({
+      ...segment,
+      speaker: segment.speaker || segment.speakerName || 'Unknown Speaker',
+      speakerName: segment.speakerName || segment.speaker || 'Unknown Speaker',
+      startTime: segment.startTime || Date.now() / 1000,
+      timestamp: segment.timestamp || new Date().toLocaleTimeString()
+    }));
+    
+    setTranscriptionSegments(normalizedSegments);
+    console.log('📝 Enhanced transcription updated:', normalizedSegments.length, 'segments');
     
     // Show success toast for significant updates
-    if (segments.length > 0 && segments.length % 5 === 0) {
-      toast.success(`🎯 ${segments.length} segments transcribed with AI speaker detection!`);
+    if (normalizedSegments.length > 0 && normalizedSegments.length % 5 === 0) {
+      toast.success(`🎯 ${normalizedSegments.length} segments transcribed with AI speaker detection!`);
     }
   };
 
@@ -276,8 +287,8 @@ export const EnhancedMeetingPage = () => {
                         </h3>
                         {transcriptionSegments.length > 0 ? (
                           <div className="space-y-3">
-                            {Array.from(new Set(transcriptionSegments.filter(s => s.isFinal).map(s => s.speaker))).map((speaker) => {
-                              const speakerSegments = transcriptionSegments.filter(s => s.speaker === speaker && s.isFinal);
+                            {Array.from(new Set(transcriptionSegments.filter(s => s.isFinal).map(s => s.speakerName || s.speaker))).map((speaker) => {
+                              const speakerSegments = transcriptionSegments.filter(s => (s.speakerName || s.speaker) === speaker && s.isFinal);
                               const totalWords = speakerSegments.reduce((sum, s) => sum + s.text.split(' ').length, 0);
                               const avgConfidence = Math.round(speakerSegments.reduce((sum, s) => sum + s.confidence, 0) / speakerSegments.length * 100);
                               
@@ -351,7 +362,7 @@ export const EnhancedMeetingPage = () => {
                               <div className="bg-gradient-to-r from-emerald-500/20 to-teal-500/20 p-4 rounded-lg border border-emerald-500/30">
                                 <h4 className="font-semibold text-white mb-2">Active Speakers</h4>
                                 <p className="text-2xl font-bold text-emerald-400">
-                                  {new Set(transcriptionSegments.map(s => s.speaker)).size}
+                                  {new Set(transcriptionSegments.map(s => s.speakerName || s.speaker)).size}
                                 </p>
                               </div>
                             </div>
