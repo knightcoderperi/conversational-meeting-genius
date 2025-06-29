@@ -105,11 +105,15 @@ export const EnhancedMeetingPage = () => {
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
     // Normalize the segments to ensure consistent interface
     const normalizedSegments = segments.map(segment => ({
-      ...segment,
-      speakerName: segment.speakerName || segment.speaker || 'Unknown Speaker',
+      id: segment.id,
+      speaker: segment.speaker,
+      text: segment.text,
+      confidence: segment.confidence,
+      timestamp: segment.timestamp || new Date().toLocaleTimeString(),
       startTime: segment.startTime ?? Date.now() / 1000,
-      timestamp: segment.timestamp || new Date().toLocaleTimeString()
-    })) as TranscriptionSegment[];
+      isFinal: segment.isFinal,
+      speakerName: segment.speakerName || segment.speaker || 'Unknown Speaker'
+    }));
     
     setTranscriptionSegments(normalizedSegments);
     console.log('📝 Enhanced transcription updated:', normalizedSegments.length, 'segments');
