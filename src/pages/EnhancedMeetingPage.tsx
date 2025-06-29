@@ -107,7 +107,7 @@ export const EnhancedMeetingPage = () => {
     const normalizedSegments = segments.map(segment => ({
       ...segment,
       speakerName: segment.speakerName || segment.speaker || 'Unknown Speaker',
-      startTime: segment.startTime || Date.now() / 1000,
+      startTime: segment.startTime ?? Date.now() / 1000,
       timestamp: segment.timestamp || new Date().toLocaleTimeString()
     }));
     
