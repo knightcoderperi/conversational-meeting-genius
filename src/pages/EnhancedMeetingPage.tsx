@@ -103,7 +103,7 @@ export const EnhancedMeetingPage = () => {
   };
 
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
-    // Ensure all segments have the required properties for compatibility
+    // Ensure all segments have the required properties
     const processedSegments = segments.map(segment => ({
       ...segment,
       startTime: segment.startTime || Date.now() / 1000,
