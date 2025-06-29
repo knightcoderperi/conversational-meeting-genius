@@ -14,6 +14,7 @@ import { ArrowLeft, Users, BarChart3, MessageSquare, Brain, Zap, Sparkles, Trend
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { type TranscriptionSegment } from '@/types/transcription';
 
 interface Meeting {
   id: string;
@@ -21,17 +22,6 @@ interface Meeting {
   platform: string;
   status: string;
   start_time: string;
-}
-
-interface TranscriptionSegment {
-  id: string;
-  speaker: string;
-  speakerName: string;
-  text: string;
-  confidence: number;
-  timestamp: string;
-  startTime: number;
-  isFinal: boolean;
 }
 
 export const EnhancedMeetingPage = () => {
@@ -116,7 +106,6 @@ export const EnhancedMeetingPage = () => {
     // Normalize the segments to ensure consistent interface
     const normalizedSegments = segments.map(segment => ({
       ...segment,
-      speaker: segment.speaker || segment.speakerName || 'Unknown Speaker',
       speakerName: segment.speakerName || segment.speaker || 'Unknown Speaker',
       startTime: segment.startTime || Date.now() / 1000,
       timestamp: segment.timestamp || new Date().toLocaleTimeString()
