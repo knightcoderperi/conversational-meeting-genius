@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MeetingControlCenter } from '@/components/meeting/MeetingControlCenter';
-import { EnhancedSpeakerTranscription } from '@/components/meeting/EnhancedSpeakerTranscription';
+import { AdvancedMultiSpeakerTranscription } from '@/components/meeting/AdvancedMultiSpeakerTranscription';
 import { UltimateChatbot } from '@/components/meeting/UltimateChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Users, BarChart3, MessageSquare, Brain, Zap, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
 interface Meeting {
   id: string;
@@ -77,7 +79,7 @@ export const EnhancedMeetingPage = () => {
     setIsRecording(true);
     console.log('🎬 Enhanced recording started with unlimited duration:', stream);
     toast.success('🚀 Recording started with unlimited duration!', {
-      description: 'AI transcription and analysis active'
+      description: 'Advanced AI transcription and multi-speaker analysis active'
     });
   };
 
@@ -121,31 +123,36 @@ export const EnhancedMeetingPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-slate-900 dark:to-slate-800">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <motion.div 
+          className="text-center"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="w-16 h-16 bg-gradient-to-r from-purple-500 via-pink-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
             <Brain className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-            🚀 Loading AI Meeting Platform
+          <h2 className="text-xl font-bold text-white mb-2">
+            🚀 Loading Ultimate AI Meeting Platform
           </h2>
-          <p className="text-gray-600 dark:text-gray-300">
-            Preparing unlimited transcription system...
+          <p className="text-purple-300">
+            Preparing advanced transcription system...
           </p>
-        </div>
+        </motion.div>
       </div>
     );
   }
 
   if (!meeting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-slate-900 dark:to-slate-800">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-2xl font-bold text-white mb-4">
             Meeting not found
           </h2>
           <Link to="/">
-            <Button className="bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0">
+            <Button className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0">
               Return to Dashboard
             </Button>
           </Link>
@@ -155,32 +162,32 @@ export const EnhancedMeetingPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-800">
       {/* Enhanced Header */}
-      <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-lg border-b border-slate-200/50 dark:border-slate-700/50 shadow-lg">
+      <header className="bg-black/40 backdrop-blur-xl border-b border-purple-500/20 shadow-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <Link 
                 to="/" 
-                className="flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors duration-200 hover:scale-105"
+                className="flex items-center text-purple-300 hover:text-purple-100 transition-colors duration-200 hover:scale-105"
               >
                 <ArrowLeft className="w-5 h-5 mr-2" />
                 Dashboard
               </Link>
-              <div className="border-l border-gray-300 dark:border-gray-600 h-6"></div>
+              <div className="border-l border-purple-500/30 h-6"></div>
               <div>
-                <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   {meeting.title}
                 </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-300 capitalize flex items-center">
+                <p className="text-sm text-purple-300 capitalize flex items-center">
                   <Sparkles className="w-3 h-3 mr-1" />
-                  {meeting.platform} Meeting • AI-Powered
+                  {meeting.platform} Meeting • Ultimate AI-Powered
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge className="bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0">
+              <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 animate-pulse">
                 <Zap className="w-3 h-3 mr-1" />
                 Unlimited
               </Badge>
@@ -191,7 +198,7 @@ export const EnhancedMeetingPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Recording & Enhanced Transcription */}
+          {/* Left Column - Recording & Advanced Transcription */}
           <div className="space-y-6">
             <MeetingControlCenter
               onStartRecording={handleStartRecording}
@@ -200,7 +207,7 @@ export const EnhancedMeetingPage = () => {
               isRecording={isRecording}
             />
             
-            <EnhancedSpeakerTranscription
+            <AdvancedMultiSpeakerTranscription
               meetingId={meeting.id}
               isRecording={isRecording}
               mediaStream={mediaStream}
@@ -210,19 +217,19 @@ export const EnhancedMeetingPage = () => {
 
           {/* Right Column - Enhanced Tabs */}
           <div>
-            <Card className="h-[calc(100vh-8rem)] bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-0 shadow-2xl">
+            <Card className="h-[calc(100vh-8rem)] bg-black/40 backdrop-blur-xl border border-purple-500/20 shadow-2xl">
               <Tabs defaultValue="chat" className="flex flex-col h-full">
-                <div className="border-b bg-gradient-to-r from-blue-500/10 to-purple-500/10 p-4">
-                  <TabsList className="grid w-full grid-cols-3 bg-white/60 dark:bg-slate-700/60 backdrop-blur-sm">
-                    <TabsTrigger value="chat" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-600 data-[state=active]:text-white">
+                <div className="border-b border-purple-500/20 bg-gradient-to-r from-purple-500/10 to-pink-500/10 p-4">
+                  <TabsList className="grid w-full grid-cols-3 bg-black/40 backdrop-blur-sm">
+                    <TabsTrigger value="chat" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500 data-[state=active]:text-white">
                       <Brain className="w-4 h-4" />
                       <span>Ultimate AI</span>
                     </TabsTrigger>
-                    <TabsTrigger value="analytics" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white">
+                    <TabsTrigger value="analytics" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white">
                       <BarChart3 className="w-4 h-4" />
                       <span>Analytics</span>
                     </TabsTrigger>
-                    <TabsTrigger value="participants" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-600 data-[state=active]:text-white">
+                    <TabsTrigger value="participants" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-500 data-[state=active]:text-white">
                       <Users className="w-4 h-4" />
                       <span>Speakers</span>
                     </TabsTrigger>
@@ -253,9 +260,9 @@ export const EnhancedMeetingPage = () => {
                   <TabsContent value="participants" className="h-full m-0">
                     <CardContent className="p-4 h-full">
                       <div className="space-y-4">
-                        <h3 className="font-bold text-xl text-gray-900 dark:text-white flex items-center">
-                          <Users className="w-5 h-5 mr-2 text-blue-500" />
-                          Smart Speaker Detection
+                        <h3 className="font-bold text-xl text-white flex items-center">
+                          <Users className="w-5 h-5 mr-2 text-purple-400" />
+                          Advanced Speaker Detection
                         </h3>
                         {transcriptionSegments.length > 0 ? (
                           <div className="space-y-3">
@@ -265,45 +272,51 @@ export const EnhancedMeetingPage = () => {
                               const avgConfidence = Math.round(speakerSegments.reduce((sum, s) => sum + s.confidence, 0) / speakerSegments.length * 100);
                               
                               return (
-                                <div key={speaker} className="group hover:scale-105 transition-all duration-300">
-                                  <div className="flex items-center space-x-4 p-4 bg-gradient-to-r from-white to-blue-50 dark:from-slate-800 dark:to-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 shadow-lg">
-                                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                                <motion.div 
+                                  key={speaker} 
+                                  className="group hover:scale-105 transition-all duration-300"
+                                  initial={{ opacity: 0, y: 20 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  transition={{ duration: 0.3 }}
+                                >
+                                  <div className="flex items-center space-x-4 p-4 bg-gradient-to-r from-white/10 to-purple-500/10 rounded-xl border border-purple-500/30 shadow-lg backdrop-blur-sm">
+                                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
                                       <Users className="w-6 h-6 text-white" />
                                     </div>
                                     <div className="flex-1">
-                                      <p className="font-bold text-gray-900 dark:text-white text-lg">{speaker}</p>
-                                      <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                      <p className="font-bold text-white text-lg">{speaker}</p>
+                                      <div className="flex items-center space-x-4 text-sm text-purple-300 mt-1">
                                         <span className="flex items-center">
-                                          <MessageSquare className="w-3 h-3 mr-1 text-blue-500" />
+                                          <MessageSquare className="w-3 h-3 mr-1 text-blue-400" />
                                           {speakerSegments.length} segments
                                         </span>
                                         <span className="flex items-center">
-                                          <Zap className="w-3 h-3 mr-1 text-green-500" />
+                                          <Zap className="w-3 h-3 mr-1 text-emerald-400" />
                                           {totalWords} words
                                         </span>
                                         <span className="flex items-center">
-                                          <BarChart3 className="w-3 h-3 mr-1 text-purple-500" />
+                                          <BarChart3 className="w-3 h-3 mr-1 text-pink-400" />
                                           {avgConfidence}% accuracy
                                         </span>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
+                                </motion.div>
                               );
                             })}
                           </div>
                         ) : (
                           <div className="text-center py-12 animate-fade-in">
-                            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                            <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
                               <Users className="w-8 h-8 text-white" />
                             </div>
-                            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                              🎯 Smart Speaker Detection Ready
+                            <h4 className="text-lg font-semibold text-white mb-2">
+                              🎯 Advanced Speaker Detection Ready
                             </h4>
-                            <p className="text-sm text-gray-600 dark:text-gray-300 max-w-sm mx-auto">
+                            <p className="text-sm text-purple-300 max-w-sm mx-auto">
                               {isRecording 
-                                ? 'AI will automatically identify and track speakers as they participate in the meeting' 
-                                : 'Start recording to enable intelligent speaker identification and analysis'}
+                                ? 'Ultimate AI will automatically identify and track speakers with advanced voice analysis and video processing' 
+                                : 'Start recording to enable intelligent multi-speaker identification and real-time analysis'}
                             </p>
                           </div>
                         )}

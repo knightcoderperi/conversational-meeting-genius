@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Send, Bot, User, Sparkles, Zap, Brain, Stars, Globe, FileText } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Send, Bot, User, Brain, Sparkles, FileText, MessageSquare, BarChart3, Lightbulb } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface TranscriptionSegment {
   id: string;
@@ -20,11 +22,10 @@ interface TranscriptionSegment {
 
 interface ChatMessage {
   id: string;
-  type: 'user' | 'ai';
+  type: 'user' | 'assistant';
   content: string;
-  timestamp: Date;
-  isTyping?: boolean;
-  category: 'meeting' | 'general' | 'article';
+  timestamp: string;
+  category?: 'meeting' | 'general' | 'analysis';
 }
 
 interface UltimateChatbotProps {
@@ -38,493 +39,414 @@ export const UltimateChatbot: React.FC<UltimateChatbotProps> = ({
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('chat');
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  const meetingQueries = [
-    { icon: "📝", text: "Summarize the key points discussed", color: "from-blue-500 to-cyan-500" },
-    { icon: "✅", text: "What action items were mentioned?", color: "from-green-500 to-emerald-500" },
-    { icon: "💡", text: "What decisions were made?", color: "from-purple-500 to-pink-500" },
-    { icon: "🔍", text: "Analyze the main topics", color: "from-orange-500 to-red-500" },
-    { icon: "⏰", text: "What happened in the last 5 minutes?", color: "from-indigo-500 to-purple-500" },
-    { icon: "📊", text: "Generate meeting insights", color: "from-teal-500 to-green-500" }
+  // Quick action suggestions
+  const quickActions = [
+    { icon: FileText, text: "Summarize this meeting", category: "meeting" },
+    { icon: BarChart3, text: "What are the key discussion points?", category: "meeting" },
+    { icon: Lightbulb, text: "What action items were discussed?", category: "meeting" },
+    { icon: MessageSquare, text: "Who spoke the most?", category: "meeting" },
+    { icon: Brain, text: "Write an article about AI trends", category: "general" },
+    { icon: Sparkles, text: "Explain quantum computing", category: "general" }
   ];
 
-  const generalQueries = [
-    { icon: "📰", text: "Write an article about productivity", color: "from-pink-500 to-rose-500" },
-    { icon: "💼", text: "Best practices for team meetings", color: "from-amber-500 to-yellow-500" },
-    { icon: "🚀", text: "Latest tech trends 2024", color: "from-violet-500 to-purple-500" },
-    { icon: "📈", text: "Business growth strategies", color: "from-emerald-500 to-teal-500" },
-    { icon: "🧠", text: "AI and machine learning basics", color: "from-blue-500 to-indigo-500" },
-    { icon: "🎯", text: "Project management tips", color: "from-red-500 to-pink-500" }
-  ];
-
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    scrollToBottom();
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+    }
   }, [messages]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // Initialize with welcome message
+  useEffect(() => {
+    if (messages.length === 0) {
+      setMessages([{
+        id: 'welcome',
+        type: 'assistant',
+        content: `🚀 **Ultimate AI Assistant Ready!**
 
-  const getMeetingContext = (): string => {
-    const finalSegments = transcriptionHistory.filter(segment => segment.isFinal);
-    if (finalSegments.length === 0) {
-      return '';
+I'm your advanced AI assistant powered by Groq's latest models. I can help you with:
+
+**📋 Meeting Analysis:**
+- Summarize discussions and extract key points
+- Identify action items and decisions
+- Analyze speaker contributions and engagement
+- Generate meeting reports and insights
+
+**🧠 General Knowledge:**
+- Write detailed articles on any topic
+- Explain complex concepts clearly
+- Provide expert advice and recommendations
+- Answer questions across all domains
+
+**✨ Creative Writing:**
+- Generate comprehensive content
+- Create structured documents
+- Develop strategic recommendations
+
+What would you like to explore today?`,
+        timestamp: new Date().toLocaleTimeString(),
+        category: 'general'
+      }]);
     }
-    
-    return finalSegments
-      .map(segment => `[${segment.timestamp}] ${segment.speaker}: ${segment.text}`)
-      .join('\n');
-  };
+  }, []);
 
-  const determineQueryType = (message: string): 'meeting' | 'general' => {
-    const meetingKeywords = [
-      'meeting', 'discussion', 'said', 'mentioned', 'decided', 'action item', 
-      'agenda', 'participant', 'speaker', 'transcript', 'summary', 'what did'
-    ];
-    
-    const generalKeywords = [
-      'article', 'write', 'explain', 'how to', 'what is', 'tell me about',
-      'best practices', 'trends', 'tips', 'guide', 'tutorial'
-    ];
-    
-    const lowerMessage = message.toLowerCase();
-    
-    const meetingMatches = meetingKeywords.filter(keyword => lowerMessage.includes(keyword)).length;
-    const generalMatches = generalKeywords.filter(keyword => lowerMessage.includes(keyword)).length;
-    
-    // If we have meeting context and meeting-related keywords, prioritize meeting
-    const hasContext = getMeetingContext().trim().length > 0;
-    
-    if (hasContext && meetingMatches > 0) {
-      return 'meeting';
-    }
-    
-    return generalMatches > meetingMatches ? 'general' : 'meeting';
-  };
+  const sendMessage = async (messageText?: string) => {
+    const message = messageText || inputMessage.trim();
+    if (!message) return;
 
-  const typeMessage = async (content: string): Promise<void> => {
-    return new Promise((resolve) => {
-      const words = content.split(' ');
-      let currentText = '';
-      let wordIndex = 0;
-
-      const typingInterval = setInterval(() => {
-        if (wordIndex < words.length) {
-          currentText += (wordIndex > 0 ? ' ' : '') + words[wordIndex];
-          
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage && lastMessage.isTyping) {
-              lastMessage.content = currentText;
-            }
-            return newMessages;
-          });
-          
-          wordIndex++;
-        } else {
-          clearInterval(typingInterval);
-          setIsTyping(false);
-          
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage) {
-              lastMessage.isTyping = false;
-            }
-            return newMessages;
-          });
-          
-          resolve();
-        }
-      }, 50);
-    });
-  };
-
-  const sendMessageToAI = async (message: string) => {
-    const queryType = determineQueryType(message);
-    const context = getMeetingContext();
-    
-    setIsProcessing(true);
-    
+    // Add user message
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       type: 'user',
       content: message,
-      timestamp: new Date(),
-      category: queryType
+      timestamp: new Date().toLocaleTimeString(),
+      category: determineMessageCategory(message)
     };
-    
-    setMessages(prev => [...prev, userMessage]);
 
-    let aiMessage: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      type: 'ai',
-      content: '',
-      timestamp: new Date(),
-      isTyping: true,
-      category: queryType
-    };
-    
-    setMessages(prev => [...prev, aiMessage]);
-    setIsTyping(true);
+    setMessages(prev => [...prev, userMessage]);
+    setInputMessage('');
+    setIsLoading(true);
 
     try {
-      console.log('🧠 Sending to Ultimate AI:', { message, queryType, contextLength: context.length });
+      // Determine if this is a meeting-related query
+      const isMeetingQuery = isMeetingRelated(message) && transcriptionHistory.length > 0;
       
-      let aiPrompt = '';
-      let aiContext = '';
-
-      if (queryType === 'meeting' && context.trim()) {
-        aiPrompt = `You are an AI assistant analyzing a meeting. Answer the following question based on the meeting transcription: ${message}`;
-        aiContext = context;
-      } else if (queryType === 'general' || !context.trim()) {
-        if (message.toLowerCase().includes('article')) {
-          aiPrompt = `You are a professional content writer. Create a comprehensive, well-structured article about: ${message}. Include headings, bullet points, and actionable insights. Make it engaging and informative.`;
-          aiContext = '';
-        } else {
-          aiPrompt = `You are a knowledgeable AI assistant. Provide a detailed, helpful response to: ${message}. Be comprehensive, accurate, and include practical examples where relevant.`;
-          aiContext = '';
-        }
-      } else {
-        aiPrompt = message;
-        aiContext = context;
+      // Prepare context
+      let context = '';
+      if (isMeetingQuery) {
+        context = transcriptionHistory
+          .filter(segment => segment.isFinal)
+          .map(segment => `${segment.speaker}: ${segment.text}`)
+          .join('\n');
       }
-      
+
+      // Call the enhanced Groq function
       const { data, error } = await supabase.functions.invoke('groq-chat', {
         body: {
-          message: aiPrompt,
-          context: aiContext
+          message: message,
+          context: context
         }
       });
 
       if (error) {
-        console.error('Ultimate AI function error:', error);
-        throw new Error(error.message);
+        throw error;
       }
 
-      if (!data || !data.response) {
-        throw new Error('No response received from Ultimate AI');
-      }
+      // Add AI response
+      const aiMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: data.response || 'I apologize, but I encountered an issue processing your request.',
+        timestamp: new Date().toLocaleTimeString(),
+        category: isMeetingQuery ? 'meeting' : 'general'
+      };
 
-      await typeMessage(data.response);
+      setMessages(prev => [...prev, aiMessage]);
 
-      // Update message category
-      setMessages(prev => {
-        const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage && lastMessage.type === 'ai') {
-          lastMessage.category = queryType;
-        }
-        return newMessages;
-      });
-
+      // Save to database if meeting-related
       if (meetingId) {
-        await saveChatMessage(meetingId, message, data.response, queryType);
+        await supabase
+          .from('live_chat_messages')
+          .insert({
+            user_id: (await supabase.auth.getUser()).data.user?.id,
+            meeting_id: meetingId,
+            message: message,
+            ai_response: data.response,
+            context_summary: context ? context.substring(0, 500) : null
+          });
       }
-      
+
     } catch (error) {
-      console.error('Error getting Ultimate AI response:', error);
-      toast.error('🤖 Ultimate AI assistant encountered an error. Please try again.');
+      console.error('Error sending message:', error);
+      toast.error('Failed to get AI response. Please try again.');
       
-      setMessages(prev => {
-        const newMessages = [...prev];
-        const lastMessage = newMessages[newMessages.length - 1];
-        if (lastMessage && lastMessage.type === 'ai') {
-          lastMessage.content = `Sorry, I encountered an error while processing your request. ${
-            queryType === 'meeting' 
-              ? 'For meeting-related questions, please ensure you have spoken during the recording.' 
-              : 'Please try rephrasing your question.'
-          }`;
-          lastMessage.isTyping = false;
-        }
-        return newMessages;
-      });
-      setIsTyping(false);
+      // Add error message
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'assistant',
+        content: '❌ I apologize, but I encountered an error. Please try rephrasing your question or check your connection.',
+        timestamp: new Date().toLocaleTimeString(),
+        category: 'general'
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
-      setIsProcessing(false);
+      setIsLoading(false);
     }
   };
 
-  const saveChatMessage = async (meetingId: string, message: string, aiResponse: string, category: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      await supabase
-        .from('live_chat_messages')
-        .insert({
-          meeting_id: meetingId,
-          user_id: user?.id,
-          message,
-          ai_response: aiResponse,
-          context_summary: category === 'meeting' ? getMeetingContext().slice(0, 500) : `General query: ${category}`
-        });
-    } catch (error) {
-      console.error('Error saving ultimate chat message:', error);
+  const determineMessageCategory = (message: string): 'meeting' | 'general' | 'analysis' => {
+    const meetingKeywords = ['meeting', 'discussion', 'speaker', 'action item', 'summary', 'transcript'];
+    const analysisKeywords = ['analyze', 'insights', 'key points', 'statistics', 'trends'];
+    
+    const lowerMessage = message.toLowerCase();
+    
+    if (analysisKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      return 'analysis';
     }
+    
+    if (meetingKeywords.some(keyword => lowerMessage.includes(keyword))) {
+      return 'meeting';
+    }
+    
+    return 'general';
   };
 
-  const handleSendMessage = () => {
-    if (inputMessage.trim()) {
-      sendMessageToAI(inputMessage);
-      setInputMessage('');
-    }
-  };
-
-  const handleQuickQuery = (query: string) => {
-    sendMessageToAI(query);
+  const isMeetingRelated = (message: string): boolean => {
+    const meetingKeywords = [
+      'meeting', 'discussion', 'conversation', 'transcript', 'speakers', 'participants',
+      'summary', 'action item', 'decision', 'agenda', 'minutes', 'who said', 'what did',
+      'key points', 'main topics', 'conclusions'
+    ];
+    
+    return meetingKeywords.some(keyword => 
+      message.toLowerCase().includes(keyword)
+    );
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      sendMessage();
     }
   };
 
-  const hasTranscriptionData = transcriptionHistory.some(segment => segment.isFinal);
-  const transcriptionCount = transcriptionHistory.filter(s => s.isFinal).length;
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'meeting': return <MessageSquare className="w-3 h-3" />;
-      case 'article': return <FileText className="w-3 h-3" />;
-      case 'general': return <Globe className="w-3 h-3" />;
-      default: return <Brain className="w-3 h-3" />;
-    }
-  };
-
-  const getCategoryColor = (category: string) => {
+  const getCategoryColor = (category?: string) => {
     switch (category) {
       case 'meeting': return 'from-blue-500 to-cyan-500';
-      case 'article': return 'from-green-500 to-emerald-500';
-      case 'general': return 'from-purple-500 to-pink-500';
-      default: return 'from-gray-500 to-gray-600';
+      case 'analysis': return 'from-purple-500 to-pink-500';
+      case 'general': return 'from-green-500 to-emerald-500';
+      default: return 'from-gray-500 to-slate-500';
+    }
+  };
+
+  const getCategoryIcon = (category?: string) => {
+    switch (category) {
+      case 'meeting': return MessageSquare;
+      case 'analysis': return BarChart3;
+      case 'general': return Brain;
+      default: return Sparkles;
     }
   };
 
   return (
-    <Card className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20 border-0 shadow-2xl backdrop-blur-sm overflow-hidden">
-      <CardHeader className="pb-3 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 text-white">
+    <Card className="h-full bg-gradient-to-br from-slate-900/95 to-purple-900/95 backdrop-blur-xl border border-purple-500/30 shadow-2xl">
+      <CardHeader className="pb-3 border-b border-purple-500/20">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="relative">
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                <Brain className="w-6 h-6 text-white" />
-              </div>
-              <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full flex items-center justify-center animate-pulse">
-                <Sparkles className="w-3 h-3 text-white" />
-              </div>
+            <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center animate-pulse">
+              <Brain className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="text-xl font-bold flex items-center space-x-2">
-                <span>🚀 Ultimate AI Assistant</span>
-                <Stars className="w-5 h-5 animate-pulse" />
+              <span className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Ultimate AI Assistant
               </span>
-              <p className="text-blue-100 text-sm">Meeting Analysis + General Knowledge + Article Writing</p>
+              <div className="text-xs text-purple-300">
+                Powered by Groq • Multi-domain Expert
+              </div>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
-              <Globe className="w-3 h-3 mr-1" />
-              Unlimited
-            </Badge>
-            <Badge className="bg-white/20 text-white border-white/30 backdrop-blur-sm">
-              <Zap className="w-3 h-3 mr-1" />
-              {transcriptionCount} segments
-            </Badge>
-          </div>
+          <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white animate-pulse">
+            <Sparkles className="w-3 h-3 mr-1" />
+            LIVE
+          </Badge>
         </CardTitle>
       </CardHeader>
-      
-      {/* Dual Mode Quick Queries */}
-      <div className="px-4 py-3 bg-gradient-to-r from-white/80 to-white/60 dark:from-slate-800/80 dark:to-slate-800/60 backdrop-blur-sm">
-        <div className="space-y-3">
-          {hasTranscriptionData && (
-            <div>
-              <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 flex items-center">
-                <MessageSquare className="w-3 h-3 mr-1" />
-                Meeting Analysis
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
-                {meetingQueries.map((query, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleQuickQuery(query.text)}
-                    className={`text-xs h-auto py-2 px-3 justify-start bg-gradient-to-r ${query.color} text-white border-0 hover:scale-105 transition-all duration-300 hover:shadow-lg`}
-                    disabled={isProcessing}
+
+      <CardContent className="p-0 flex flex-col h-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+          <div className="px-4 pt-3">
+            <TabsList className="grid w-full grid-cols-3 bg-black/40">
+              <TabsTrigger value="chat" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500 data-[state=active]:text-white">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Chat
+              </TabsTrigger>
+              <TabsTrigger value="actions" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white">
+                <Lightbulb className="w-4 h-4 mr-2" />
+                Quick Actions
+              </TabsTrigger>
+              <TabsTrigger value="insights" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Insights
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="chat" className="flex-1 flex flex-col m-0">
+            <ScrollArea className="flex-1 px-4" ref={scrollAreaRef}>
+              <div className="space-y-4 py-4">
+                <AnimatePresence>
+                  {messages.map((message) => {
+                    const CategoryIcon = getCategoryIcon(message.category);
+                    return (
+                      <motion.div
+                        key={message.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div className={`max-w-[85%] ${message.type === 'user' ? 'order-1' : 'order-2'}`}>
+                          <div className={`flex items-start space-x-3 ${message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              message.type === 'user' 
+                                ? 'bg-gradient-to-r from-blue-500 to-cyan-500' 
+                                : `bg-gradient-to-r ${getCategoryColor(message.category)}`
+                            }`}>
+                              {message.type === 'user' ? (
+                                <User className="w-4 h-4 text-white" />
+                              ) : (
+                                <CategoryIcon className="w-4 h-4 text-white" />
+                              )}
+                            </div>
+                            <div className={`rounded-xl p-4 ${
+                              message.type === 'user' 
+                                ? 'bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30' 
+                                : 'bg-white/10 backdrop-blur-sm border border-white/20'
+                            }`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-medium text-white/80">
+                                  {message.type === 'user' ? 'You' : 'Ultimate AI'}
+                                </span>
+                                <div className="flex items-center space-x-2">
+                                  {message.category && (
+                                    <Badge variant="outline" className="text-xs border-white/30 text-white/70">
+                                      {message.category}
+                                    </Badge>
+                                  )}
+                                  <span className="text-xs text-white/60">{message.timestamp}</span>
+                                </div>
+                              </div>
+                              <div className="text-white text-sm leading-relaxed whitespace-pre-wrap">
+                                {message.content}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+                
+                {isLoading && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex justify-start"
                   >
-                    <span className="text-base mr-2">{query.icon}</span>
-                    <span className="font-medium">{query.text}</span>
-                  </Button>
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center animate-pulse">
+                        <Brain className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                          <span className="text-white/80 text-sm ml-2">Ultimate AI is thinking...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </ScrollArea>
+
+            <div className="p-4 border-t border-purple-500/20">
+              <div className="flex space-x-2">
+                <Input
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask me anything about the meeting or any topic..."
+                  className="flex-1 bg-white/10 border-purple-500/30 text-white placeholder-purple-300 focus:border-purple-400"
+                  disabled={isLoading}
+                />
+                <Button
+                  onClick={() => sendMessage()}
+                  disabled={!inputMessage.trim() || isLoading}
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="actions" className="flex-1 m-0">
+            <div className="p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 gap-3">
+                {quickActions.map((action, index) => (
+                  <motion.button
+                    key={index}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    onClick={() => {
+                      setActiveTab('chat');
+                      sendMessage(action.text);
+                    }}
+                    className="flex items-center space-x-3 p-3 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 transition-all duration-300 text-left"
+                  >
+                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-r ${getCategoryColor(action.category)} flex items-center justify-center`}>
+                      <action.icon className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-white text-sm">{action.text}</span>
+                  </motion.button>
                 ))}
               </div>
             </div>
-          )}
-          
-          <div>
-            <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 flex items-center">
-              <Globe className="w-3 h-3 mr-1" />
-              General Knowledge & Articles
-            </h4>
-            <div className="grid grid-cols-2 gap-2">
-              {generalQueries.map((query, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQuickQuery(query.text)}
-                  className={`text-xs h-auto py-2 px-3 justify-start bg-gradient-to-r ${query.color} text-white border-0 hover:scale-105 transition-all duration-300 hover:shadow-lg`}
-                  disabled={isProcessing}
-                >
-                  <span className="text-base mr-2">{query.icon}</span>
-                  <span className="font-medium">{query.text}</span>
-                </Button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <CardContent className="flex-1 p-0 flex flex-col">
-        <ScrollArea className="flex-1 px-4">
-          <div className="space-y-4 py-4">
-            {messages.length === 0 && (
-              <div className="text-center py-8 animate-fade-in">
-                <div className="w-20 h-20 bg-gradient-to-r from-blue-500 via-purple-600 to-pink-500 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-                  <Brain className="w-10 h-10 text-white" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                  🧠 Ultimate AI Assistant Ready
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4 max-w-sm mx-auto">
-                  I can analyze your meeting, write articles, answer general questions, and provide expert insights on any topic
-                </p>
-                <div className="space-y-2">
-                  {hasTranscriptionData && (
-                    <p className="text-xs text-green-600 dark:text-green-400 font-medium">
-                      ✅ Meeting analysis ready with {transcriptionCount} segments
-                    </p>
-                  )}
-                  <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
-                    <span className="flex items-center"><MessageSquare className="w-3 h-3 mr-1 text-blue-500" />Meeting Analysis</span>
-                    <span className="flex items-center"><FileText className="w-3 h-3 mr-1 text-green-500" />Article Writing</span>
-                    <span className="flex items-center"><Globe className="w-3 h-3 mr-1 text-purple-500" />General Knowledge</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                    message.type === 'user'
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
-                      : 'bg-white/80 dark:bg-slate-800/80 text-gray-900 dark:text-gray-100 shadow-lg backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50'
-                  }`}
-                >
-                  <div className="flex items-start space-x-3">
-                    {message.type === 'ai' && (
-                      <div className={`w-6 h-6 bg-gradient-to-r ${getCategoryColor(message.category)} rounded-full flex items-center justify-center flex-shrink-0 mt-1`}>
-                        {getCategoryIcon(message.category)}
+          </TabsContent>
+
+          <TabsContent value="insights" className="flex-1 m-0">
+            <div className="p-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Meeting Insights</h3>
+              {transcriptionHistory.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="bg-white/10 rounded-lg p-4 border border-white/20">
+                    <h4 className="font-medium text-white mb-2">📊 Session Stats</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-purple-300">Total Segments:</span>
+                        <span className="text-white ml-2">{transcriptionHistory.length}</span>
                       </div>
-                    )}
-                    {message.type === 'user' && (
-                      <User className="w-4 h-4 mt-1 flex-shrink-0" />
-                    )}
-                    <div className="flex-1">
-                      {message.type === 'ai' && (
-                        <Badge 
-                          className={`bg-gradient-to-r ${getCategoryColor(message.category)} text-white border-0 mb-2 text-xs`}
-                        >
-                          {getCategoryIcon(message.category)}
-                          <span className="ml-1 capitalize">{message.category}</span>
-                        </Badge>
-                      )}
-                      <p className={`text-sm whitespace-pre-wrap leading-relaxed font-medium ${message.isTyping ? 'animate-pulse' : ''}`}>
-                        {message.content}
-                        {message.isTyping && <span className="animate-pulse">|</span>}
-                      </p>
-                      <p className={`text-xs mt-2 ${message.type === 'user' ? 'text-blue-100' : 'text-gray-500'}`}>
-                        {message.timestamp.toLocaleTimeString()}
-                      </p>
+                      <div>
+                        <span className="text-purple-300">Speakers:</span>
+                        <span className="text-white ml-2">
+                          {new Set(transcriptionHistory.map(s => s.speaker)).size}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  
+                  <Button
+                    onClick={() => {
+                      setActiveTab('chat');
+                      sendMessage('Provide a comprehensive analysis of this meeting including key insights, speaker contributions, and action items.');
+                    }}
+                    className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Generate Full Analysis
+                  </Button>
                 </div>
-              </div>
-            ))}
-            
-            {isProcessing && !isTyping && (
-              <div className="flex justify-start animate-fade-in">
-                <div className="bg-white/80 dark:bg-slate-800/80 rounded-2xl px-4 py-3 max-w-[85%] shadow-lg backdrop-blur-sm">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-6 h-6 bg-gradient-to-r from-blue-500 via-purple-600 to-pink-500 rounded-full flex items-center justify-center animate-pulse">
-                      <Brain className="w-3 h-3 text-white" />
-                    </div>
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                      <div className="w-2 h-2 bg-pink-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                    </div>
-                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-                      🧠 Ultimate AI is processing...
-                    </span>
-                  </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Brain className="w-12 h-12 text-purple-400 mx-auto mb-4" />
+                  <p className="text-purple-300 text-sm">
+                    Start recording to see meeting insights and analysis options.
+                  </p>
                 </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-        
-        <div className="border-t bg-gradient-to-r from-white/90 to-white/70 dark:from-slate-800/90 dark:to-slate-800/70 backdrop-blur-sm p-4">
-          <div className="flex space-x-2">
-            <Input
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="✨ Ask about the meeting, request an article, or ask anything..."
-              disabled={isProcessing}
-              className="flex-1 bg-white/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-            />
-            <Button
-              onClick={handleSendMessage}
-              disabled={isProcessing || !inputMessage.trim()}
-              size="sm"
-              className="px-4 bg-gradient-to-r from-blue-500 via-purple-600 to-pink-500 hover:from-blue-600 hover:via-purple-700 hover:to-pink-600 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
-          <div className="mt-2 text-center space-y-1">
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-              ✅ Ultimate AI ready • Meeting analysis + General knowledge + Article writing
-            </p>
-            <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
-              <span className="flex items-center">
-                <MessageSquare className="w-3 h-3 mr-1 text-blue-500" />
-                {hasTranscriptionData ? `${transcriptionCount} segments` : 'No meeting data'}
-              </span>
-              <span className="flex items-center">
-                <Globe className="w-3 h-3 mr-1 text-purple-500" />
-                Unlimited topics
-              </span>
-              <span className="flex items-center">
-                <FileText className="w-3 h-3 mr-1 text-green-500" />
-                Article generation
-              </span>
+              )}
             </div>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

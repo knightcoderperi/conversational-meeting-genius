@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,230 +18,11 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-} from 'recharts';
-import {
   PieChart,
   Pie,
   Cell,
-  Sector
-} from 'recharts';
-import {
   LineChart,
-  Line,
-  Label,
-  LabelList
-} from 'recharts';
-import {
-  AreaChart,
-  Area
-} from 'recharts';
-import {
-  ScatterChart,
-  Scatter
-} from 'recharts';
-import {
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-} from 'recharts';
-import {
-  ComposedChart,
-} from 'recharts';
-import {
-  Treemap,
-} from 'recharts';
-import {
-  FunnelChart,
-  Funnel,
-  Label as FunnelLabel
-} from 'recharts';
-import {
-  RadialBarChart,
-  RadialBar
-} from 'recharts';
-import {
-  Brush,
-} from 'recharts';
-import {
-  ReferenceLine,
-  ReferenceArea,
-  ReferenceDot
-} from 'recharts';
-import {
-  ErrorBar,
-} from 'recharts';
-import {
-  CustomShape,
-} from 'recharts';
-import {
-  Crosshair,
-} from 'recharts';
-import {
-  Legend as CustomizedLegend,
-} from 'recharts';
-import {
-  Tooltip as CustomizedTooltip,
-} from 'recharts';
-import {
-  Customized,
-} from 'recharts';
-import {
-  Text,
-} from 'recharts';
-import {
-  Rectangle,
-} from 'recharts';
-import {
-  Triangle,
-} from 'recharts';
-import {
-  Sector as CustomizedSector,
-} from 'recharts';
-import {
-  Curve,
-} from 'recharts';
-import {
-  Dot,
-} from 'recharts';
-import {
-  Symbol,
-} from 'recharts';
-import {
-  Surface,
-} from 'recharts';
-import {
-  Layer,
-} from 'recharts';
-import {
-  Cell as CustomizedCell,
-} from 'recharts';
-import {
-  ReferenceLine as CustomizedReferenceLine,
-} from 'recharts';
-import {
-  ReferenceArea as CustomizedReferenceArea,
-} from 'recharts';
-import {
-  ReferenceDot as CustomizedReferenceDot,
-} from 'recharts';
-import {
-  ErrorBar as CustomizedErrorBar,
-} from 'recharts';
-import {
-  CustomShape as CustomizedCustomShape,
-} from 'recharts';
-import {
-  Crosshair as CustomizedCrosshair,
-} from 'recharts';
-import {
-  Text as CustomizedText,
-} from 'recharts';
-import {
-  Rectangle as CustomizedRectangle,
-} from 'recharts';
-import {
-  Triangle as CustomizedTriangle,
-} from 'recharts';
-import {
-  Curve as CustomizedCurve,
-} from 'recharts';
-import {
-  Dot as CustomizedDot,
-} from 'recharts';
-import {
-  Symbol as CustomizedSymbol,
-} from 'recharts';
-import {
-  Surface as CustomizedSurface,
-} from 'recharts';
-import {
-  Layer as CustomizedLayer,
-} from 'recharts';
-import {
-  ResponsiveContainer as CustomizedResponsiveContainer,
-} from 'recharts';
-import {
-  BarChart as CustomizedBarChart,
-} from 'recharts';
-import {
-  PieChart as CustomizedPieChart,
-} from 'recharts';
-import {
-  LineChart as CustomizedLineChart,
-} from 'recharts';
-import {
-  AreaChart as CustomizedAreaChart,
-} from 'recharts';
-import {
-  ScatterChart as CustomizedScatterChart,
-} from 'recharts';
-import {
-  RadarChart as CustomizedRadarChart,
-} from 'recharts';
-import {
-  ComposedChart as CustomizedComposedChart,
-} from 'recharts';
-import {
-  Treemap as CustomizedTreemap,
-} from 'recharts';
-import {
-  FunnelChart as CustomizedFunnelChart,
-} from 'recharts';
-import {
-  RadialBarChart as CustomizedRadialBarChart,
-} from 'recharts';
-import {
-  Brush as CustomizedBrush,
-} from 'recharts';
-import {
-  Bar as CustomizedBar,
-} from 'recharts';
-import {
-  Pie as CustomizedPie,
-} from 'recharts';
-import {
-  Line as CustomizedLine,
-} from 'recharts';
-import {
-  Area as CustomizedArea,
-} from 'recharts';
-import {
-  Scatter as CustomizedScatter,
-} from 'recharts';
-import {
-  Radar as CustomizedRadar,
-} from 'recharts';
-import {
-  Funnel as CustomizedFunnel,
-} from 'recharts';
-import {
-  RadialBar as CustomizedRadialBar,
-} from 'recharts';
-import {
-  XAxis as CustomizedXAxis,
-} from 'recharts';
-import {
-  YAxis as CustomizedYAxis,
-} from 'recharts';
-import {
-  CartesianGrid as CustomizedCartesianGrid,
-} from 'recharts';
-import {
-  Tooltip as CustomizedRechartsTooltip,
-} from 'recharts';
-import {
-  Legend as CustomizedRechartsLegend,
-} from 'recharts';
-import {
-  Label as CustomizedRechartsLabel,
-} from 'recharts';
-import {
-  LabelList as CustomizedRechartsLabelList,
-} from 'recharts';
-import {
-  FunnelLabel as CustomizedFunnelLabel,
+  Line
 } from 'recharts';
 
 interface Meeting {
@@ -330,8 +112,18 @@ export const MeetingAnalyticsPage = () => {
       }
 
       if (data) {
-        setTranscriptionSegments(data);
-        analyzeTranscriptionData(data);
+        // Transform database segments to match TranscriptionSegment interface
+        const transformedSegments: TranscriptionSegment[] = data.map(segment => ({
+          id: segment.id,
+          speaker: segment.speaker_name || segment.speaker_id || 'Unknown Speaker',
+          text: segment.text,
+          confidence: segment.confidence,
+          timestamp: new Date(segment.created_at).toLocaleTimeString(),
+          isFinal: segment.is_final
+        }));
+
+        setTranscriptionSegments(transformedSegments);
+        analyzeTranscriptionData(transformedSegments);
       }
     } catch (error) {
       console.error('Error fetching transcription segments:', error);
@@ -425,6 +217,8 @@ export const MeetingAnalyticsPage = () => {
       transition: {
         delayChildren: 0.3,
         staggerChildren: 0.2,
+        duration: 0.8,
+        ease: [0.6, -0.05, 0.01, 0.99] as const,
       },
     },
   };
@@ -436,7 +230,7 @@ export const MeetingAnalyticsPage = () => {
       opacity: 1,
       transition: {
         duration: 0.5,
-        ease: "easeInOut",
+        ease: [0.6, -0.05, 0.01, 0.99] as const,
       },
     },
   };
@@ -448,85 +242,33 @@ export const MeetingAnalyticsPage = () => {
       opacity: 1,
       transition: {
         duration: 0.7,
-        ease: "easeOut",
+        ease: [0.6, -0.05, 0.01, 0.99] as const,
       },
     },
   };
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
-  const RADIAN = Math.PI / 180;
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="white"
-        textAnchor={x > cx ? 'start' : 'end'}
-        dominantBaseline="central"
-      >
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    );
-  };
-
-  const data01 = [
-    { name: 'Group A', value: 400 },
-    { name: 'Group B', value: 300 },
-    { name: 'Group C', value: 300 },
-    { name: 'Group D', value: 200 },
-  ];
-
-  const data02 = [
-    { name: 'A1', value: 100 },
-    { name: 'A2', value: 140 },
-    { name: 'B1', value: 150 },
-    { name: 'B2', value: 110 },
-    { name: 'B3', value: 80 },
-    { name: 'B4', value: 120 },
-    { name: 'C1', value: 100 },
-    { name: 'C2', value: 150 },
-    { name: 'D1', value: 110 },
-    { name: 'D2', value: 90 },
-  ];
-
-  const animationVariants = {
-    hidden: { opacity: 0, scale: 0.5 },
-    visible: {
-      opacity: 1,
-      scale: 1,
-      transition: {
-        duration: 1,
-        delay: 0.5,
-        ease: [0, 0.71, 0.2, 1.01]
-      }
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      {/* Enhanced Header */}
+      <header className="bg-black/40 backdrop-blur-xl border-b border-purple-500/20 shadow-2xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
               <Link
                 to="/"
-                className="flex items-center text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+                className="flex items-center text-purple-300 hover:text-purple-100 transition-all duration-300 hover:scale-105"
               >
                 <ArrowLeft className="w-5 h-5 mr-2" />
                 Dashboard
               </Link>
-              <div className="border-l border-gray-300 dark:border-gray-600 h-6"></div>
+              <div className="border-l border-purple-500/30 h-6"></div>
               <div>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <h1 className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   {meeting.title} - Analytics
                 </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-300 capitalize">
+                <p className="text-sm text-purple-300 capitalize">
                   {meeting.platform} Meeting
                 </p>
               </div>
@@ -543,28 +285,60 @@ export const MeetingAnalyticsPage = () => {
       >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Word Frequency Analysis */}
-          <motion.div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4" variants={itemVariants}>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Top 20 Word Frequencies
+          <motion.div 
+            className="bg-black/40 backdrop-blur-xl border border-purple-500/20 shadow-2xl rounded-xl p-6" 
+            variants={itemVariants}
+          >
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+              <div className="w-3 h-3 bg-purple-500 rounded-full mr-3 animate-pulse"></div>
+              Top Word Frequencies
             </h2>
             <motion.div variants={chartVariants}>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={wordFrequencies}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="word" tick={{ fill: '#6B7280' }} />
-                  <YAxis tick={{ fill: '#6B7280' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#E5E7EB', color: '#111827' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="word" 
+                    tick={{ fill: '#9CA3AF', fontSize: 12 }} 
+                    stroke="#6B7280"
+                  />
+                  <YAxis 
+                    tick={{ fill: '#9CA3AF', fontSize: 12 }} 
+                    stroke="#6B7280"
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+                      color: '#ffffff',
+                      border: '1px solid #7C3AED',
+                      borderRadius: '8px'
+                    }} 
+                  />
                   <Legend wrapperStyle={{ color: '#D1D5DB' }} />
-                  <Bar dataKey="count" fill="#82ca9d" />
+                  <Bar 
+                    dataKey="count" 
+                    fill="url(#purpleGradient)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <defs>
+                    <linearGradient id="purpleGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#7C3AED" stopOpacity={0.6}/>
+                    </linearGradient>
+                  </defs>
                 </BarChart>
               </ResponsiveContainer>
             </motion.div>
           </motion.div>
 
           {/* Speaker Statistics */}
-          <motion.div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4" variants={itemVariants}>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Speaker Statistics
+          <motion.div 
+            className="bg-black/40 backdrop-blur-xl border border-purple-500/20 shadow-2xl rounded-xl p-6" 
+            variants={itemVariants}
+          >
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+              <div className="w-3 h-3 bg-emerald-500 rounded-full mr-3 animate-pulse"></div>
+              Speaker Distribution
             </h2>
             <motion.div variants={chartVariants}>
               <ResponsiveContainer width="100%" height={300}>
@@ -577,38 +351,115 @@ export const MeetingAnalyticsPage = () => {
                     cy="50%"
                     outerRadius={80}
                     fill="#8884d8"
-                    label
+                    label={({ speaker, percent }) => `${speaker}: ${(percent * 100).toFixed(0)}%`}
                   >
                     {speakerStats.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#E5E7EB', color: '#111827' }} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+                      color: '#ffffff',
+                      border: '1px solid #10B981',
+                      borderRadius: '8px'
+                    }} 
+                  />
                   <Legend wrapperStyle={{ color: '#D1D5DB' }} />
                 </PieChart>
               </ResponsiveContainer>
             </motion.div>
           </motion.div>
 
-          {/* Sentiment Analysis (Mock Data) */}
-          <motion.div className="bg-white dark:bg-gray-800 shadow rounded-lg p-4" variants={itemVariants}>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-              Sentiment Analysis (Mock)
+          {/* Speaking Time Analysis */}
+          <motion.div 
+            className="bg-black/40 backdrop-blur-xl border border-purple-500/20 shadow-2xl rounded-xl p-6" 
+            variants={itemVariants}
+          >
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
+              <div className="w-3 h-3 bg-orange-500 rounded-full mr-3 animate-pulse"></div>
+              Speaking Engagement
             </h2>
             <motion.div variants={chartVariants}>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={speakerStats}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="speaker" tick={{ fill: '#6B7280' }} />
-                  <YAxis tick={{ fill: '#6B7280' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#E5E7EB', color: '#111827' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="speaker" 
+                    tick={{ fill: '#9CA3AF', fontSize: 12 }} 
+                    stroke="#6B7280"
+                  />
+                  <YAxis 
+                    tick={{ fill: '#9CA3AF', fontSize: 12 }} 
+                    stroke="#6B7280"
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+                      color: '#ffffff',
+                      border: '1px solid #F59E0B',
+                      borderRadius: '8px'
+                    }} 
+                  />
                   <Legend wrapperStyle={{ color: '#D1D5DB' }} />
-                  <Bar dataKey="wordCount" fill="#FF8042" />
+                  <Bar 
+                    dataKey="wordCount" 
+                    fill="url(#orangeGradient)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <defs>
+                    <linearGradient id="orangeGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#D97706" stopOpacity={0.6}/>
+                    </linearGradient>
+                  </defs>
                 </BarChart>
               </ResponsiveContainer>
             </motion.div>
           </motion.div>
         </div>
+
+        {/* Summary Cards */}
+        <motion.div 
+          className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8"
+          variants={containerVariants}
+        >
+          <motion.div 
+            className="bg-gradient-to-br from-purple-600/20 to-pink-600/20 backdrop-blur-xl border border-purple-500/30 rounded-xl p-6 text-center"
+            variants={itemVariants}
+          >
+            <h3 className="text-2xl font-bold text-white">{transcriptionSegments.length}</h3>
+            <p className="text-purple-300">Total Segments</p>
+          </motion.div>
+          
+          <motion.div 
+            className="bg-gradient-to-br from-emerald-600/20 to-teal-600/20 backdrop-blur-xl border border-emerald-500/30 rounded-xl p-6 text-center"
+            variants={itemVariants}
+          >
+            <h3 className="text-2xl font-bold text-white">{speakerStats.length}</h3>
+            <p className="text-emerald-300">Speakers Detected</p>
+          </motion.div>
+          
+          <motion.div 
+            className="bg-gradient-to-br from-orange-600/20 to-red-600/20 backdrop-blur-xl border border-orange-500/30 rounded-xl p-6 text-center"
+            variants={itemVariants}
+          >
+            <h3 className="text-2xl font-bold text-white">
+              {speakerStats.reduce((sum, speaker) => sum + speaker.wordCount, 0)}
+            </h3>
+            <p className="text-orange-300">Total Words</p>
+          </motion.div>
+          
+          <motion.div 
+            className="bg-gradient-to-br from-blue-600/20 to-indigo-600/20 backdrop-blur-xl border border-blue-500/30 rounded-xl p-6 text-center"
+            variants={itemVariants}
+          >
+            <h3 className="text-2xl font-bold text-white">
+              {Math.round(transcriptionSegments.reduce((sum, seg) => sum + seg.confidence, 0) / transcriptionSegments.length * 100) || 0}%
+            </h3>
+            <p className="text-blue-300">Avg Confidence</p>
+          </motion.div>
+        </motion.div>
       </motion.div>
     </div>
   );
