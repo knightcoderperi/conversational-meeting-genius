@@ -103,14 +103,14 @@ export const EnhancedMeetingPage = () => {
   };
 
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
-    // Normalize the segments to ensure consistent interface
-    const normalizedSegments = segments.map(segment => ({
+    // Normalize the segments to ensure consistent interface with the imported type
+    const normalizedSegments: TranscriptionSegment[] = segments.map(segment => ({
       id: segment.id,
       speaker: segment.speaker,
       text: segment.text,
       confidence: segment.confidence,
       timestamp: segment.timestamp || new Date().toLocaleTimeString(),
-      startTime: segment.startTime ?? Date.now() / 1000,
+      startTime: segment.startTime, // Keep as optional since it's optional in the imported type
       isFinal: segment.isFinal,
       speakerName: segment.speakerName || segment.speaker || 'Unknown Speaker'
     }));
