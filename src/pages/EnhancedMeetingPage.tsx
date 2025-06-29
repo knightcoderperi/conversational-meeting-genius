@@ -104,12 +104,19 @@ export const EnhancedMeetingPage = () => {
   };
 
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
-    setTranscriptionSegments(segments);
-    console.log('📝 Enhanced transcription updated:', segments.length, 'segments');
+    // Ensure all segments have the required properties for compatibility
+    const processedSegments = segments.map(segment => ({
+      ...segment,
+      startTime: segment.startTime || Date.now() / 1000,
+      speakerName: segment.speakerName || segment.speaker
+    }));
+    
+    setTranscriptionSegments(processedSegments);
+    console.log('📝 Enhanced transcription updated:', processedSegments.length, 'segments');
     
     // Show success toast for significant updates
-    if (segments.length > 0 && segments.length % 5 === 0) {
-      toast.success(`🎯 ${segments.length} segments transcribed with AI speaker detection!`);
+    if (processedSegments.length > 0 && processedSegments.length % 5 === 0) {
+      toast.success(`🎯 ${processedSegments.length} segments transcribed with AI speaker detection!`);
     }
   };
 
@@ -196,52 +203,56 @@ export const EnhancedMeetingPage = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-2 gap-6 h-[calc(100vh-8rem)]">
           {/* Left Column - Recording & Advanced Transcription */}
-          <div className="space-y-6">
-            <MeetingControlCenter
-              onStartRecording={handleStartRecording}
-              onStopRecording={handleStopRecording}
-              meetingId={meeting.id}
-              isRecording={isRecording}
-            />
+          <div className="space-y-6 flex flex-col">
+            <div className="flex-shrink-0">
+              <MeetingControlCenter
+                onStartRecording={handleStartRecording}
+                onStopRecording={handleStopRecording}
+                meetingId={meeting.id}
+                isRecording={isRecording}
+              />
+            </div>
             
-            <AdvancedMultiSpeakerTranscription
-              meetingId={meeting.id}
-              isRecording={isRecording}
-              mediaStream={mediaStream}
-              onTranscriptionUpdate={handleTranscriptionUpdate}
-            />
+            <div className="flex-1 min-h-0">
+              <AdvancedMultiSpeakerTranscription
+                meetingId={meeting.id}
+                isRecording={isRecording}
+                mediaStream={mediaStream}
+                onTranscriptionUpdate={handleTranscriptionUpdate}
+              />
+            </div>
           </div>
 
           {/* Right Column - Enhanced Tabs */}
-          <div>
-            <Card className="h-[calc(100vh-8rem)] bg-black/40 backdrop-blur-xl border border-purple-500/20 shadow-2xl">
+          <div className="flex flex-col">
+            <Card className="flex-1 bg-black/40 backdrop-blur-xl border border-purple-500/20 shadow-2xl flex flex-col">
               <Tabs defaultValue="chat" className="flex flex-col h-full">
-                <div className="border-b border-purple-500/20 bg-gradient-to-r from-purple-500/10 to-pink-500/10 p-4">
+                <div className="border-b border-purple-500/20 bg-gradient-to-r from-purple-500/10 to-pink-500/10 p-4 flex-shrink-0">
                   <TabsList className="grid w-full grid-cols-4 bg-black/40 backdrop-blur-sm">
                     <TabsTrigger value="chat" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500 data-[state=active]:text-white">
                       <Brain className="w-4 h-4" />
-                      <span>AI Assistant</span>
+                      <span className="hidden sm:inline">AI Assistant</span>
                     </TabsTrigger>
                     <TabsTrigger value="analytics" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white">
                       <BarChart3 className="w-4 h-4" />
-                      <span>Analytics</span>
+                      <span className="hidden sm:inline">Analytics</span>
                     </TabsTrigger>
                     <TabsTrigger value="participants" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-500 data-[state=active]:to-red-500 data-[state=active]:text-white">
                       <Users className="w-4 h-4" />
-                      <span>Speakers</span>
+                      <span className="hidden sm:inline">Speakers</span>
                     </TabsTrigger>
                     <TabsTrigger value="insights" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white">
                       <TrendingUp className="w-4 h-4" />
-                      <span>Insights</span>
+                      <span className="hidden sm:inline">Insights</span>
                     </TabsTrigger>
                   </TabsList>
                 </div>
 
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0">
-                    <div className="p-4 h-full">
+                    <div className="h-full">
                       <IntelligentChatbot 
                         meetingId={meeting.id}
                         transcriptionHistory={transcriptionSegments}
@@ -261,7 +272,7 @@ export const EnhancedMeetingPage = () => {
                   </TabsContent>
 
                   <TabsContent value="participants" className="h-full m-0">
-                    <CardContent className="p-4 h-full">
+                    <CardContent className="p-4 h-full overflow-y-auto">
                       <div className="space-y-4">
                         <h3 className="font-bold text-xl text-white flex items-center">
                           <Users className="w-5 h-5 mr-2 text-purple-400" />
@@ -328,7 +339,7 @@ export const EnhancedMeetingPage = () => {
                   </TabsContent>
 
                   <TabsContent value="insights" className="h-full m-0">
-                    <CardContent className="p-4 h-full">
+                    <CardContent className="p-4 h-full overflow-y-auto">
                       <div className="space-y-4">
                         <h3 className="font-bold text-xl text-white flex items-center">
                           <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
