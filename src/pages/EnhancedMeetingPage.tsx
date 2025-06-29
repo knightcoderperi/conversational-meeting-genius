@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,7 +15,7 @@ import { ArrowLeft, Users, BarChart3, MessageSquare, Brain, Zap, Sparkles, Trend
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { type TranscriptionSegment } from '@/types/transcription';
+import { TranscriptionSegment } from '@/types/transcription';
 
 interface Meeting {
   id: string;
