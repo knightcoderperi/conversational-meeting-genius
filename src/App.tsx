@@ -11,6 +11,8 @@ import { NewMeetingPage } from "@/pages/NewMeetingPage";
 import { MeetingPage } from "@/pages/MeetingPage";
 import { EnhancedMeetingPage } from "@/pages/EnhancedMeetingPage";
 import { MeetingAnalyticsPage } from "@/pages/MeetingAnalyticsPage";
+import { UpgradePlanPage } from "@/pages/UpgradePlanPage";
+import { ViewAnalyticsPage } from "@/pages/ViewAnalyticsPage";
 import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
@@ -29,6 +31,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/upgrade" 
+              element={
+                <ProtectedRoute>
+                  <UpgradePlanPage />
                 </ProtectedRoute>
               } 
             />
@@ -53,6 +63,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <MeetingAnalyticsPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/meeting/:id/view-analytics" 
+              element={
+                <ProtectedRoute>
+                  <ViewAnalyticsPage />
                 </ProtectedRoute>
               } 
             />

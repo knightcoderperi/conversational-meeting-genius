@@ -1,17 +1,16 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MeetingControlCenter } from '@/components/meeting/MeetingControlCenter';
 import { AdvancedMultiSpeakerTranscription } from '@/components/meeting/AdvancedMultiSpeakerTranscription';
-import { UltimateChatbot } from '@/components/meeting/UltimateChatbot';
+import { IntelligentChatbot } from '@/components/meeting/IntelligentChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Users, BarChart3, MessageSquare, Brain, Zap, Sparkles } from 'lucide-react';
+import { ArrowLeft, Users, BarChart3, MessageSquare, Brain, Zap, Sparkles, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -105,7 +104,7 @@ export const EnhancedMeetingPage = () => {
         
         // Auto-redirect to analytics page immediately with a beautiful transition
         setTimeout(() => {
-          navigate(`/meeting/${meeting.id}/analytics`);
+          navigate(`/meeting/${meeting.id}/view-analytics`);
         }, 1000);
       }
     }
@@ -176,14 +175,21 @@ export const EnhancedMeetingPage = () => {
                 Dashboard
               </Link>
               <div className="border-l border-purple-500/30 h-6"></div>
-              <div>
-                <h1 className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  {meeting.title}
-                </h1>
-                <p className="text-sm text-purple-300 capitalize flex items-center">
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  {meeting.platform} Meeting • Ultimate AI-Powered
-                </p>
+              <div className="flex items-center space-x-3">
+                <img 
+                  src="/lovable-uploads/9edb3bf5-360c-407d-a8a0-289819c45c66.png" 
+                  alt="OmniMeet" 
+                  className="w-8 h-8 rounded-full"
+                />
+                <div>
+                  <h1 className="text-lg font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                    {meeting.title}
+                  </h1>
+                  <p className="text-sm text-purple-300 capitalize flex items-center">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    {meeting.platform} Meeting • Ultimate AI-Powered
+                  </p>
+                </div>
               </div>
             </div>
             <div className="flex items-center space-x-2">
@@ -220,10 +226,10 @@ export const EnhancedMeetingPage = () => {
             <Card className="h-[calc(100vh-8rem)] bg-black/40 backdrop-blur-xl border border-purple-500/20 shadow-2xl">
               <Tabs defaultValue="chat" className="flex flex-col h-full">
                 <div className="border-b border-purple-500/20 bg-gradient-to-r from-purple-500/10 to-pink-500/10 p-4">
-                  <TabsList className="grid w-full grid-cols-3 bg-black/40 backdrop-blur-sm">
+                  <TabsList className="grid w-full grid-cols-4 bg-black/40 backdrop-blur-sm">
                     <TabsTrigger value="chat" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500 data-[state=active]:text-white">
                       <Brain className="w-4 h-4" />
-                      <span>Ultimate AI</span>
+                      <span>AI Assistant</span>
                     </TabsTrigger>
                     <TabsTrigger value="analytics" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-500 data-[state=active]:text-white">
                       <BarChart3 className="w-4 h-4" />
@@ -233,13 +239,17 @@ export const EnhancedMeetingPage = () => {
                       <Users className="w-4 h-4" />
                       <span>Speakers</span>
                     </TabsTrigger>
+                    <TabsTrigger value="insights" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white">
+                      <TrendingUp className="w-4 h-4" />
+                      <span>Insights</span>
+                    </TabsTrigger>
                   </TabsList>
                 </div>
 
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0">
                     <div className="p-4 h-full">
-                      <UltimateChatbot 
+                      <IntelligentChatbot 
                         meetingId={meeting.id}
                         transcriptionHistory={transcriptionSegments}
                       />
@@ -317,6 +327,47 @@ export const EnhancedMeetingPage = () => {
                               {isRecording 
                                 ? 'Ultimate AI will automatically identify and track speakers with advanced voice analysis and video processing' 
                                 : 'Start recording to enable intelligent multi-speaker identification and real-time analysis'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </TabsContent>
+
+                  <TabsContent value="insights" className="h-full m-0">
+                    <CardContent className="p-4 h-full">
+                      <div className="space-y-4">
+                        <h3 className="font-bold text-xl text-white flex items-center">
+                          <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
+                          Meeting Insights
+                        </h3>
+                        {transcriptionSegments.length > 0 ? (
+                          <div className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 p-4 rounded-lg border border-blue-500/30">
+                                <h4 className="font-semibold text-white mb-2">Total Segments</h4>
+                                <p className="text-2xl font-bold text-blue-400">{transcriptionSegments.length}</p>
+                              </div>
+                              <div className="bg-gradient-to-r from-emerald-500/20 to-teal-500/20 p-4 rounded-lg border border-emerald-500/30">
+                                <h4 className="font-semibold text-white mb-2">Active Speakers</h4>
+                                <p className="text-2xl font-bold text-emerald-400">
+                                  {new Set(transcriptionSegments.map(s => s.speaker)).size}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              onClick={() => navigate(`/meeting/${meeting.id}/view-analytics`)}
+                              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white"
+                            >
+                              <TrendingUp className="w-4 h-4 mr-2" />
+                              View Full Analytics
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="text-center py-12">
+                            <TrendingUp className="w-12 h-12 text-purple-400 mx-auto mb-4" />
+                            <p className="text-purple-300 text-sm">
+                              Start recording to see meeting insights and analytics.
                             </p>
                           </div>
                         )}
