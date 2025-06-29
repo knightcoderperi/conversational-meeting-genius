@@ -5,7 +5,7 @@ export interface TranscriptionSegment {
   text: string;
   confidence: number;
   timestamp: string;
-  startTime?: number; // Optional for compatibility
+  startTime: number; // Make this required to match usage
   isFinal: boolean;
   speakerName?: string; // Optional for backward compatibility
 }
