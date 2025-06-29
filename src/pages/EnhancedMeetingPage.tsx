@@ -103,24 +103,12 @@ export const EnhancedMeetingPage = () => {
   };
 
   const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
-    // Normalize the segments to ensure consistent interface with the imported type
-    const normalizedSegments: TranscriptionSegment[] = segments.map(segment => ({
-      id: segment.id,
-      speaker: segment.speaker,
-      text: segment.text,
-      confidence: segment.confidence,
-      timestamp: segment.timestamp || new Date().toLocaleTimeString(),
-      startTime: segment.startTime, // Keep as optional since it's optional in the imported type
-      isFinal: segment.isFinal,
-      speakerName: segment.speakerName || segment.speaker || 'Unknown Speaker'
-    }));
-    
-    setTranscriptionSegments(normalizedSegments);
-    console.log('📝 Enhanced transcription updated:', normalizedSegments.length, 'segments');
+    setTranscriptionSegments(segments);
+    console.log('📝 Enhanced transcription updated:', segments.length, 'segments');
     
     // Show success toast for significant updates
-    if (normalizedSegments.length > 0 && normalizedSegments.length % 5 === 0) {
-      toast.success(`🎯 ${normalizedSegments.length} segments transcribed with AI speaker detection!`);
+    if (segments.length > 0 && segments.length % 5 === 0) {
+      toast.success(`🎯 ${segments.length} segments transcribed with AI speaker detection!`);
     }
   };
 
