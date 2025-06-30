@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +22,7 @@ interface ChatMessage {
   type: 'user' | 'ai';
   content: string;
   timestamp: Date;
+  isGeneral?: boolean;
 }
 
 interface LiveAIChatbotProps {
@@ -72,12 +72,43 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const sendMessageToAI = async (message: string) => {
-    if (!meetingContext.trim()) {
-      toast.error('No meeting data available yet. Start recording to begin.');
-      return;
-    }
+  const isGeneralQuestion = (message: string): boolean => {
+    const meetingKeywords = [
+      'meeting', 'discuss', 'speaker', 'said', 'talked', 'mentioned', 'action', 'decision',
+      'summary', 'timeline', 'participant', 'topic', 'agenda', 'note', 'transcript'
+    ];
+    
+    const lowerMessage = message.toLowerCase();
+    return !meetingKeywords.some(keyword => lowerMessage.includes(keyword));
+  };
 
+  const callGroqAPI = async (message: string, context?: string): Promise<string> => {
+    try {
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/ai-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabase.supabaseKey}`,
+        },
+        body: JSON.stringify({
+          message,
+          context: context || null
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.response;
+    } catch (error) {
+      console.error('Error calling Groq API:', error);
+      throw error;
+    }
+  };
+
+  const sendMessageToAI = async (message: string) => {
     setIsProcessing(true);
     
     // Add user message immediately
@@ -91,14 +122,27 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      // Simple AI response based on meeting content
-      const aiResponse = await generateAIResponse(message, meetingContext);
+      let aiResponse: string;
+      let isGeneral = false;
+
+      // Check if it's a general question or meeting-related
+      if (isGeneralQuestion(message) || !meetingContext.trim()) {
+        // Use Groq API for general questions
+        aiResponse = await callGroqAPI(message, meetingContext.trim() || undefined);
+        isGeneral = true;
+        console.log('Using Groq API for general question');
+      } else {
+        // Use local analysis for meeting-related questions
+        aiResponse = await generateMeetingResponse(message, meetingContext);
+        console.log('Using local analysis for meeting question');
+      }
       
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
         content: aiResponse,
-        timestamp: new Date()
+        timestamp: new Date(),
+        isGeneral
       };
 
       setMessages(prev => [...prev, aiMessage]);
@@ -125,8 +169,17 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     }
   };
 
-  const generateAIResponse = async (query: string, context: string): Promise<string> => {
-    // Simple pattern matching for common queries
+  const generateMeetingResponse = async (query: string, context: string): Promise<string> => {
+    // If we have meeting context, try Groq API first for better responses
+    if (context.trim()) {
+      try {
+        return await callGroqAPI(query, context);
+      } catch (error) {
+        console.log('Groq API failed, falling back to local analysis');
+      }
+    }
+
+    // Fallback to local pattern matching
     const lowerQuery = query.toLowerCase();
     
     if (lowerQuery.includes('summarize') || lowerQuery.includes('summary')) {
@@ -284,9 +337,14 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             </div>
             <span>AI Assistant</span>
           </div>
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            {transcriptionHistory.length} segments
-          </Badge>
+          <div className="flex items-center space-x-2">
+            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+              {transcriptionHistory.length} segments
+            </Badge>
+            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+              Enhanced AI
+            </Badge>
+          </div>
         </CardTitle>
       </CardHeader>
       
@@ -300,7 +358,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
               size="sm"
               onClick={() => handleQuickQuery(query)}
               className="text-xs h-auto py-2 px-3 justify-start hover:bg-blue-50 hover:border-blue-200"
-              disabled={isProcessing || !meetingContext}
+              disabled={isProcessing}
             >
               {query}
             </Button>
@@ -316,10 +374,10 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
               <div className="text-center py-8">
                 <Bot className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  AI Assistant Ready
+                  Enhanced AI Assistant Ready
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-300">
-                  Ask questions about your meeting or use quick queries above
+                  Ask about your meeting or any general questions
                 </p>
               </div>
             )}
@@ -338,7 +396,14 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 >
                   <div className="flex items-start space-x-2">
                     {message.type === 'ai' && (
-                      <Bot className="w-4 h-4 mt-1 flex-shrink-0" />
+                      <div className="flex items-center space-x-1">
+                        <Bot className="w-4 h-4 mt-1 flex-shrink-0" />
+                        {message.isGeneral && (
+                          <Badge variant="secondary" className="text-xs">
+                            General AI
+                          </Badge>
+                        )}
+                      </div>
                     )}
                     {message.type === 'user' && (
                       <User className="w-4 h-4 mt-1 flex-shrink-0" />
@@ -379,24 +444,22 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-              placeholder="Ask about the meeting..."
-              disabled={isProcessing || !meetingContext}
+              placeholder="Ask about the meeting or any general question..."
+              disabled={isProcessing}
               className="flex-1"
             />
             <Button
               onClick={handleSendMessage}
-              disabled={isProcessing || !inputMessage.trim() || !meetingContext}
+              disabled={isProcessing || !inputMessage.trim()}
               size="sm"
               className="px-4"
             >
               <Send className="w-4 h-4" />
             </Button>
           </div>
-          {!meetingContext && (
-            <p className="text-xs text-gray-500 mt-2">
-              Start recording to enable AI assistant
-            </p>
-          )}
+          <p className="text-xs text-gray-500 mt-2">
+            💡 Can answer both meeting-related and general questions
+          </p>
         </div>
       </CardContent>
     </Card>
