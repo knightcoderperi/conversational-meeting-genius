@@ -11,6 +11,7 @@ export class RealSpeakerIdentifier {
   }> = [];
   private lastSpeakingTime: number = 0;
   private speakingThreshold: number = 0.1;
+  private speakerSwitchCooldown: number = 1000; // 1 second cooldown between speaker switches
 
   constructor(nameExtractor: import('./videoNameExtractor').VideoNameExtractor) {
     this.nameExtractor = nameExtractor;
@@ -19,12 +20,12 @@ export class RealSpeakerIdentifier {
   identifySpeaker(audioLevel: number, timestamp: number = Date.now()): string {
     const availableSpeakers = this.nameExtractor.getAllSpeakers();
     
-    // If no speakers identified yet, use generic labels
+    // If no speakers identified yet from video, use audio-based detection
     if (availableSpeakers.length === 0) {
       return this.handleGenericSpeaker(audioLevel, timestamp);
     }
     
-    // Determine if someone is currently speaking
+    // Check if someone is currently speaking
     const isSpeaking = audioLevel > this.speakingThreshold;
     
     if (isSpeaking) {
@@ -53,11 +54,25 @@ export class RealSpeakerIdentifier {
     audioLevel: number,
     timestamp: number
   ): string {
-    // Advanced speaker switching logic
+    // Get currently highlighted speaker from video
+    const highlightedSpeaker = this.nameExtractor.getCurrentHighlightedSpeaker();
+    
+    // If we have a highlighted speaker from video, use that
+    if (highlightedSpeaker && highlightedSpeaker.name) {
+      const videoSpeaker = availableSpeakers.find(s => s.name === highlightedSpeaker.name);
+      if (videoSpeaker) {
+        this.currentSpeaker = { id: videoSpeaker.id, name: videoSpeaker.name };
+        this.recordSpeakingActivity(this.currentSpeaker, audioLevel, timestamp);
+        this.lastSpeakingTime = timestamp;
+        return this.currentSpeaker.name;
+      }
+    }
+    
+    // Fallback to timing-based speaker detection
     const timeSinceLastSpeech = timestamp - this.lastSpeakingTime;
     
-    // If it's been more than 3 seconds since last speech, likely a new speaker
-    if (timeSinceLastSpeech > 3000 || !this.currentSpeaker) {
+    // If it's been more than cooldown period since last speech, potentially switch speaker
+    if (timeSinceLastSpeech > this.speakerSwitchCooldown || !this.currentSpeaker) {
       this.currentSpeaker = this.selectNextSpeaker(availableSpeakers);
     }
     
@@ -77,13 +92,13 @@ export class RealSpeakerIdentifier {
       return { id: 'speaker_1', name: 'Speaker 1' };
     }
     
-    // Simple round-robin selection
-    const recentSpeakers = this.speakerHistory.slice(-5);
-    const lastSpeakerIds = recentSpeakers.map(s => s.speakerId);
+    // Prioritize speakers based on recent video activity
+    const recentSpeakers = this.speakerHistory.slice(-10);
+    const recentSpeakerIds = recentSpeakers.map(s => s.speakerId);
     
-    // Find a speaker who hasn't spoken recently
+    // Find a speaker who hasn't spoken recently, or the first available
     const nextSpeaker = availableSpeakers.find(speaker => 
-      !lastSpeakerIds.includes(speaker.id)
+      !recentSpeakerIds.includes(speaker.id)
     ) || availableSpeakers[0];
     
     return { id: nextSpeaker.id, name: nextSpeaker.name };
@@ -98,7 +113,7 @@ export class RealSpeakerIdentifier {
     const timeDiff = timestamp - (lastEntry?.timestamp || 0);
     
     // Only record if it's a new speaker or significant time has passed
-    if (!lastEntry || lastEntry.speakerId !== speaker.id || timeDiff > 1000) {
+    if (!lastEntry || lastEntry.speakerId !== speaker.id || timeDiff > 2000) {
       this.speakerHistory.push({
         speakerId: speaker.id,
         speakerName: speaker.name,
@@ -107,15 +122,26 @@ export class RealSpeakerIdentifier {
         duration: timeDiff
       });
       
+      console.log(`🎤 Speaker activity: ${speaker.name} (level: ${audioLevel.toFixed(2)})`);
+      
       // Keep history manageable
-      if (this.speakerHistory.length > 100) {
-        this.speakerHistory = this.speakerHistory.slice(-50);
+      if (this.speakerHistory.length > 50) {
+        this.speakerHistory = this.speakerHistory.slice(-25);
       }
     }
   }
 
   getCurrentSpeaker(): { id: string; name: string } | null {
     return this.currentSpeaker;
+  }
+
+  getAllIdentifiedSpeakers(): Array<{ id: string; name: string }> {
+    const speakers = new Set<string>();
+    this.speakerHistory.forEach(entry => {
+      speakers.add(JSON.stringify({ id: entry.speakerId, name: entry.speakerName }));
+    });
+    
+    return Array.from(speakers).map(s => JSON.parse(s));
   }
 
   getSpeakerStats(): Map<string, {
@@ -156,6 +182,17 @@ export class RealSpeakerIdentifier {
   setSpeakingThreshold(threshold: number): void {
     this.speakingThreshold = Math.max(0, Math.min(1, threshold));
     console.log(`🎚️ Speaking threshold set to ${this.speakingThreshold}`);
+  }
+
+  setSpeakerSwitchCooldown(cooldown: number): void {
+    this.speakerSwitchCooldown = Math.max(500, cooldown); // Minimum 500ms
+    console.log(`⏱️ Speaker switch cooldown set to ${this.speakerSwitchCooldown}ms`);
+  }
+
+  forceSpeakerSwitch(availableSpeakers: Array<{ id: string; name: string; firstSeen: number }>): string {
+    this.currentSpeaker = this.selectNextSpeaker(availableSpeakers);
+    console.log(`🔄 Manually switched to ${this.currentSpeaker.name}`);
+    return this.currentSpeaker.name;
   }
 
   reset(): void {
