@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { MeetingRecorder } from '@/components/meeting/MeetingRecorder';
-import { RealtimeTranscription } from '@/components/meeting/RealtimeTranscription';
+import { EnhancedRealtimeTranscription } from '@/components/meeting/EnhancedRealtimeTranscription';
 import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
@@ -160,7 +159,7 @@ export const MeetingPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Recording & Transcription */}
+          {/* Left Column - Enhanced Recording & Transcription */}
           <div className="space-y-6">
             <MeetingRecorder
               onStartRecording={handleStartRecording}
@@ -169,7 +168,7 @@ export const MeetingPage = () => {
               isRecording={isRecording}
             />
             
-            <RealtimeTranscription
+            <EnhancedRealtimeTranscription
               meetingId={meeting.id}
               isRecording={isRecording}
               mediaStream={mediaStream}
