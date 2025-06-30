@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Users, BarChart3, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
+import { TranscriptionEntry } from '@/utils/integratedTranscriptionSystem';
 
 interface Meeting {
   id: string;
@@ -21,15 +23,6 @@ interface Meeting {
   start_time: string;
 }
 
-interface TranscriptionSegment {
-  id: string;
-  speaker: string;
-  text: string;
-  confidence: number;
-  timestamp: string;
-  isFinal: boolean;
-}
-
 export const MeetingPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -37,7 +30,7 @@ export const MeetingPage = () => {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
+  const [transcriptionEntries, setTranscriptionEntries] = useState<TranscriptionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [meetingStartTime] = useState(Date.now());
 
@@ -101,9 +94,9 @@ export const MeetingPage = () => {
     }
   };
 
-  const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
-    setTranscriptionSegments(segments);
-    console.log('Transcription updated:', segments.length, 'segments');
+  const handleTranscriptionUpdate = (entries: TranscriptionEntry[]) => {
+    setTranscriptionEntries(entries);
+    console.log('Transcription updated:', entries.length, 'entries');
   };
 
   if (loading) {
@@ -202,7 +195,7 @@ export const MeetingPage = () => {
                     <div className="p-4 h-full">
                       <LiveAIChatbot 
                         meetingId={meeting.id}
-                        transcriptionHistory={transcriptionSegments}
+                        transcriptionHistory={transcriptionEntries}
                       />
                     </div>
                   </TabsContent>
@@ -211,7 +204,7 @@ export const MeetingPage = () => {
                     <div className="p-4 h-full">
                       <LiveMeetingAnalytics 
                         meetingId={meeting.id}
-                        transcriptionSegments={transcriptionSegments}
+                        transcriptionSegments={transcriptionEntries}
                         isRecording={isRecording}
                         startTime={meetingStartTime}
                       />
@@ -224,12 +217,12 @@ export const MeetingPage = () => {
                         <h3 className="font-semibold text-gray-900 dark:text-white">
                           Identified Speakers
                         </h3>
-                        {transcriptionSegments.length > 0 ? (
+                        {transcriptionEntries.length > 0 ? (
                           <div className="space-y-3">
-                            {Array.from(new Set(transcriptionSegments.filter(s => s.isFinal).map(s => s.speaker))).map((speaker) => {
-                              const speakerSegments = transcriptionSegments.filter(s => s.speaker === speaker && s.isFinal);
-                              const totalWords = speakerSegments.reduce((sum, s) => sum + s.text.split(' ').length, 0);
-                              const avgConfidence = Math.round(speakerSegments.reduce((sum, s) => sum + s.confidence, 0) / speakerSegments.length * 100);
+                            {Array.from(new Set(transcriptionEntries.filter(entry => entry.isFinal).map(entry => entry.speaker))).map((speaker) => {
+                              const speakerEntries = transcriptionEntries.filter(entry => entry.speaker === speaker && entry.isFinal);
+                              const totalWords = speakerEntries.reduce((sum, entry) => sum + entry.text.split(' ').length, 0);
+                              const avgConfidence = Math.round(speakerEntries.reduce((sum, entry) => sum + entry.confidence, 0) / speakerEntries.length * 100);
                               
                               return (
                                 <div key={speaker} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -239,7 +232,7 @@ export const MeetingPage = () => {
                                   <div className="flex-1">
                                     <p className="font-medium text-gray-900 dark:text-white">{speaker}</p>
                                     <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-300">
-                                      <span>{speakerSegments.length} segments</span>
+                                      <span>{speakerEntries.length} segments</span>
                                       <span>{totalWords} words</span>
                                       <span>{avgConfidence}% accuracy</span>
                                     </div>
