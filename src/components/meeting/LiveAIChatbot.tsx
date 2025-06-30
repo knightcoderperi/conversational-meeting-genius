@@ -37,17 +37,32 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [meetingContext, setMeetingContext] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Quick action buttons for meeting analysis
   const quickQueries = [
-    "📝 Summarize the meeting so far",
-    "✅ What are the action items mentioned?",
-    "💡 What decisions were made?",
-    "🔍 What are the main topics discussed?",
-    "⏱️ What was discussed in the last few minutes?",
-    "📊 Give me key insights from the meeting"
+    "📝 Summarize key points",
+    "✅ List action items",
+    "👥 Who spoke most?",
+    "💡 Key decisions made",
+    "🔍 Important topics",
+    "⏱️ Meeting timeline",
+    "📊 Speaker analysis",
+    "🎯 Next steps"
   ];
+
+  useEffect(() => {
+    // Update context whenever new transcription comes in
+    if (transcriptionHistory.length > 0) {
+      const recentTranscripts = transcriptionHistory
+        .filter(segment => segment.isFinal)
+        .slice(-50) // Last 50 segments for context
+        .map(segment => `[${segment.timestamp}] ${segment.speaker}: ${segment.text}`)
+        .join('\n');
+      setMeetingContext(recentTranscripts);
+    }
+  }, [transcriptionHistory]);
 
   useEffect(() => {
     scrollToBottom();
@@ -57,22 +72,9 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const getMeetingContext = (): string => {
-    const finalSegments = transcriptionHistory.filter(segment => segment.isFinal);
-    if (finalSegments.length === 0) {
-      return '';
-    }
-    
-    return finalSegments
-      .map(segment => `[${segment.timestamp}] ${segment.speaker}: ${segment.text}`)
-      .join('\n');
-  };
-
   const sendMessageToAI = async (message: string) => {
-    const context = getMeetingContext();
-    
-    if (!context.trim()) {
-      toast.error('No meeting transcription available yet. Please start speaking during the recording.');
+    if (!meetingContext.trim()) {
+      toast.error('No meeting data available yet. Start recording to begin.');
       return;
     }
 
@@ -89,47 +91,31 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      console.log('Sending to Groq AI:', { message, contextLength: context.length });
+      // Simple AI response based on meeting content
+      const aiResponse = await generateAIResponse(message, meetingContext);
       
-      // Call Groq AI edge function
-      const { data, error } = await supabase.functions.invoke('groq-chat', {
-        body: {
-          message: message,
-          context: context
-        }
-      });
-
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw new Error(error.message);
-      }
-
-      if (!data || !data.response) {
-        throw new Error('No response received from AI');
-      }
-
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: data.response,
+        content: aiResponse,
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, aiMessage]);
 
-      // Save to database if meeting ID exists
+      // Save to database
       if (meetingId) {
-        await saveChatMessage(meetingId, message, data.response);
+        await saveChatMessage(meetingId, message, aiResponse);
       }
       
     } catch (error) {
       console.error('Error getting AI response:', error);
-      toast.error('Failed to get AI response. Please try again.');
+      toast.error('Failed to get AI response');
       
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: 'Sorry, I encountered an error while processing your request. Please make sure you have spoken during the recording so I have meeting content to analyze.',
+        content: 'Sorry, I encountered an error processing your request. Please try again.',
         timestamp: new Date()
       };
       
@@ -139,18 +125,138 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     }
   };
 
+  const generateAIResponse = async (query: string, context: string): Promise<string> => {
+    // Simple pattern matching for common queries
+    const lowerQuery = query.toLowerCase();
+    
+    if (lowerQuery.includes('summarize') || lowerQuery.includes('summary')) {
+      return generateSummary(context);
+    } else if (lowerQuery.includes('action item')) {
+      return extractActionItems(context);
+    } else if (lowerQuery.includes('who spoke') || lowerQuery.includes('speaker')) {
+      return analyzeSpeakers(context);
+    } else if (lowerQuery.includes('decision') || lowerQuery.includes('conclude')) {
+      return extractDecisions(context);
+    } else if (lowerQuery.includes('topic') || lowerQuery.includes('subject')) {
+      return extractTopics(context);
+    } else if (lowerQuery.includes('timeline') || lowerQuery.includes('when')) {
+      return generateTimeline(context);
+    } else {
+      return searchContent(query, context);
+    }
+  };
+
+  const generateSummary = (context: string): string => {
+    const lines = context.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return "No meeting content available yet.";
+    
+    const speakers = [...new Set(lines.map(line => line.split(': ')[0]?.split('] ')[1]).filter(Boolean))];
+    const keyPoints = lines.slice(-10).map(line => line.split(': ').slice(1).join(': ')).filter(Boolean);
+    
+    return `📝 **Meeting Summary**\n\n**Participants:** ${speakers.join(', ')}\n\n**Recent Discussion Points:**\n${keyPoints.map(point => `• ${point}`).join('\n')}\n\n**Duration:** ${lines.length} segments recorded`;
+  };
+
+  const extractActionItems = (context: string): string => {
+    const lines = context.split('\n');
+    const actionWords = ['will', 'should', 'need to', 'must', 'action', 'task', 'follow up', 'next step'];
+    
+    const actionItems = lines.filter(line => 
+      actionWords.some(word => line.toLowerCase().includes(word))
+    ).slice(-5);
+    
+    if (actionItems.length === 0) {
+      return "✅ No clear action items identified yet. Continue the meeting for more specific tasks.";
+    }
+    
+    return `✅ **Action Items Identified:**\n\n${actionItems.map((item, index) => `${index + 1}. ${item.split(': ').slice(1).join(': ')}`).join('\n')}`;
+  };
+
+  const analyzeSpeakers = (context: string): string => {
+    const lines = context.split('\n').filter(line => line.trim());
+    const speakerCounts: { [key: string]: number } = {};
+    
+    lines.forEach(line => {
+      const speaker = line.split(': ')[0]?.split('] ')[1];
+      if (speaker) {
+        speakerCounts[speaker] = (speakerCounts[speaker] || 0) + 1;
+      }
+    });
+    
+    const sortedSpeakers = Object.entries(speakerCounts)
+      .sort(([,a], [,b]) => b - a);
+    
+    return `👥 **Speaker Analysis:**\n\n${sortedSpeakers.map(([speaker, count]) => `• **${speaker}**: ${count} segments (${Math.round((count / lines.length) * 100)}%)`).join('\n')}`;
+  };
+
+  const extractDecisions = (context: string): string => {
+    const lines = context.split('\n');
+    const decisionWords = ['decided', 'agreed', 'concluded', 'final', 'approve', 'reject'];
+    
+    const decisions = lines.filter(line => 
+      decisionWords.some(word => line.toLowerCase().includes(word))
+    ).slice(-3);
+    
+    if (decisions.length === 0) {
+      return "💡 No clear decisions identified yet in the meeting.";
+    }
+    
+    return `💡 **Key Decisions:**\n\n${decisions.map((decision, index) => `${index + 1}. ${decision.split(': ').slice(1).join(': ')}`).join('\n')}`;
+  };
+
+  const extractTopics = (context: string): string => {
+    const text = context.toLowerCase();
+    const commonWords = ['the', 'is', 'at', 'which', 'on', 'and', 'a', 'to', 'are', 'as', 'were', 'been', 'be', 'have', 'has', 'had'];
+    
+    const words = text.split(/\W+/).filter(word => 
+      word.length > 4 && !commonWords.includes(word)
+    );
+    
+    const wordCount: { [key: string]: number } = {};
+    words.forEach(word => {
+      wordCount[word] = (wordCount[word] || 0) + 1;
+    });
+    
+    const topTopics = Object.entries(wordCount)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 8)
+      .map(([word]) => word);
+    
+    return `🔍 **Key Topics Discussed:**\n\n${topTopics.map(topic => `• ${topic.charAt(0).toUpperCase() + topic.slice(1)}`).join('\n')}`;
+  };
+
+  const generateTimeline = (context: string): string => {
+    const lines = context.split('\n').filter(line => line.trim()).slice(-10);
+    
+    return `⏱️ **Recent Meeting Timeline:**\n\n${lines.map((line, index) => {
+      const timestamp = line.match(/\[(.*?)\]/)?.[1] || 'Unknown time';
+      const content = line.split(': ').slice(1).join(': ');
+      return `${index + 1}. **${timestamp}** - ${content}`;
+    }).join('\n')}`;
+  };
+
+  const searchContent = (query: string, context: string): string => {
+    const lines = context.split('\n');
+    const matchingLines = lines.filter(line => 
+      line.toLowerCase().includes(query.toLowerCase())
+    ).slice(-5);
+    
+    if (matchingLines.length === 0) {
+      return `🔍 No mentions of "${query}" found in the current meeting transcript.`;
+    }
+    
+    return `🔍 **Search Results for "${query}":**\n\n${matchingLines.map((line, index) => `${index + 1}. ${line.split(': ').slice(1).join(': ')}`).join('\n')}`;
+  };
+
   const saveChatMessage = async (meetingId: string, message: string, aiResponse: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       await supabase
         .from('live_chat_messages')
         .insert({
           meeting_id: meetingId,
-          user_id: user?.id,
+          user_id: (await supabase.auth.getUser()).data.user?.id,
           message,
           ai_response: aiResponse,
-          context_summary: getMeetingContext().slice(0, 500)
+          context_summary: meetingContext.slice(0, 500)
         });
     } catch (error) {
       console.error('Error saving chat message:', error);
@@ -168,16 +274,6 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     sendMessageToAI(query);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  const hasTranscriptionData = transcriptionHistory.some(segment => segment.isFinal);
-  const transcriptionCount = transcriptionHistory.filter(s => s.isFinal).length;
-
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
@@ -186,33 +282,31 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span>AI Meeting Assistant</span>
+            <span>AI Assistant</span>
           </div>
-          <Badge variant="outline" className={hasTranscriptionData ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500"}>
-            {transcriptionCount} segments
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            {transcriptionHistory.length} segments
           </Badge>
         </CardTitle>
       </CardHeader>
       
       {/* Quick Query Buttons */}
-      {hasTranscriptionData && (
-        <div className="px-4 pb-3">
-          <div className="grid grid-cols-2 gap-2">
-            {quickQueries.map((query, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                onClick={() => handleQuickQuery(query)}
-                className="text-xs h-auto py-2 px-3 justify-start hover:bg-blue-50 hover:border-blue-200 text-left"
-                disabled={isProcessing}
-              >
-                {query}
-              </Button>
-            ))}
-          </div>
+      <div className="px-4 pb-3">
+        <div className="grid grid-cols-2 gap-2">
+          {quickQueries.map((query, index) => (
+            <Button
+              key={index}
+              variant="outline"
+              size="sm"
+              onClick={() => handleQuickQuery(query)}
+              className="text-xs h-auto py-2 px-3 justify-start hover:bg-blue-50 hover:border-blue-200"
+              disabled={isProcessing || !meetingContext}
+            >
+              {query}
+            </Button>
+          ))}
         </div>
-      )}
+      </div>
       
       {/* Messages */}
       <CardContent className="flex-1 p-0 flex flex-col">
@@ -224,17 +318,9 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                   AI Assistant Ready
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                  {hasTranscriptionData 
-                    ? `I can analyze your meeting with ${transcriptionCount} transcribed segments`
-                    : 'Start speaking during the recording to enable AI analysis'
-                  }
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Ask questions about your meeting or use quick queries above
                 </p>
-                {hasTranscriptionData && (
-                  <p className="text-xs text-gray-500">
-                    Use the quick queries above or ask me anything about your meeting
-                  </p>
-                )}
               </div>
             )}
             
@@ -244,7 +330,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-lg px-4 py-3 ${
+                  className={`max-w-[80%] rounded-lg px-4 py-3 ${
                     message.type === 'user'
                       ? 'bg-blue-500 text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
@@ -258,7 +344,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                       <User className="w-4 h-4 mt-1 flex-shrink-0" />
                     )}
                     <div className="flex-1">
-                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                       <p className="text-xs opacity-70 mt-2">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
@@ -270,7 +356,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             
             {isProcessing && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3 max-w-[85%]">
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3 max-w-[80%]">
                   <div className="flex items-center space-x-2">
                     <Bot className="w-4 h-4" />
                     <div className="flex space-x-1">
@@ -278,7 +364,6 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                       <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                       <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                     </div>
-                    <span className="text-sm text-gray-600">Analyzing meeting...</span>
                   </div>
                 </div>
               </div>
@@ -293,28 +378,23 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             <Input
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={hasTranscriptionData ? "Ask me about the meeting..." : "Start speaking to enable AI chat"}
-              disabled={isProcessing || !hasTranscriptionData}
+              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+              placeholder="Ask about the meeting..."
+              disabled={isProcessing || !meetingContext}
               className="flex-1"
             />
             <Button
               onClick={handleSendMessage}
-              disabled={isProcessing || !inputMessage.trim() || !hasTranscriptionData}
+              disabled={isProcessing || !inputMessage.trim() || !meetingContext}
               size="sm"
               className="px-4"
             >
               <Send className="w-4 h-4" />
             </Button>
           </div>
-          {!hasTranscriptionData && (
+          {!meetingContext && (
             <p className="text-xs text-gray-500 mt-2">
-              💡 Speak during the recording to enable AI assistant
-            </p>
-          )}
-          {hasTranscriptionData && (
-            <p className="text-xs text-green-600 mt-2">
-              ✅ Ready to analyze {transcriptionCount} transcribed segments
+              Start recording to enable AI assistant
             </p>
           )}
         </div>
