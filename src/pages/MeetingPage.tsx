@@ -23,6 +23,15 @@ interface Meeting {
   start_time: string;
 }
 
+interface TranscriptionSegment {
+  id: string;
+  speaker: string;
+  text: string;
+  confidence: number;
+  timestamp: string;
+  isFinal: boolean;
+}
+
 export const MeetingPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -99,6 +108,18 @@ export const MeetingPage = () => {
     console.log('Transcription updated:', entries.length, 'entries');
   };
 
+  // Convert TranscriptionEntry to TranscriptionSegment format
+  const convertToTranscriptionSegments = (entries: TranscriptionEntry[]): TranscriptionSegment[] => {
+    return entries.map(entry => ({
+      id: entry.id,
+      speaker: entry.speaker,
+      text: entry.text,
+      confidence: entry.confidence,
+      timestamp: new Date(entry.timestamp).toLocaleTimeString(),
+      isFinal: entry.isFinal
+    }));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -121,6 +142,8 @@ export const MeetingPage = () => {
       </div>
     );
   }
+
+  const transcriptionSegments = convertToTranscriptionSegments(transcriptionEntries);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -195,7 +218,7 @@ export const MeetingPage = () => {
                     <div className="p-4 h-full">
                       <LiveAIChatbot 
                         meetingId={meeting.id}
-                        transcriptionHistory={transcriptionEntries}
+                        transcriptionHistory={transcriptionSegments}
                       />
                     </div>
                   </TabsContent>
@@ -204,7 +227,7 @@ export const MeetingPage = () => {
                     <div className="p-4 h-full">
                       <LiveMeetingAnalytics 
                         meetingId={meeting.id}
-                        transcriptionSegments={transcriptionEntries}
+                        transcriptionSegments={transcriptionSegments}
                         isRecording={isRecording}
                         startTime={meetingStartTime}
                       />
