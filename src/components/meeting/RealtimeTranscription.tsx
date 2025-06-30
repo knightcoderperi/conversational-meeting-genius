@@ -69,8 +69,8 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
 
       // Initialize Web Speech API for transcription
       if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognitionRef.current = new SpeechRecognition();
+        const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognitionRef.current = new SpeechRecognitionConstructor();
         
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
