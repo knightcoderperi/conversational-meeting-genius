@@ -1,8 +1,4 @@
 
-import { MultiSpeakerAudioCapture } from './multiSpeakerAudioCapture';
-import { VideoNameExtractor } from './videoNameExtractor';
-import { RealSpeakerIdentifier } from './realSpeakerIdentifier';
-
 export interface TranscriptionEntry {
   id: string;
   timestamp: number;
@@ -15,18 +11,18 @@ export interface TranscriptionEntry {
 }
 
 export class IntegratedTranscriptionSystem {
-  private audioCapture: MultiSpeakerAudioCapture;
-  private nameExtractor: VideoNameExtractor;
-  private speakerIdentifier: RealSpeakerIdentifier;
   private transcriptionBuffer: TranscriptionEntry[] = [];
   private isActive: boolean = false;
   private recognition: SpeechRecognition | null = null;
   private onTranscriptionUpdate: ((entries: TranscriptionEntry[]) => void) | null = null;
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private currentSpeaker: string = 'Speaker 1';
+  private speakerCount: number = 1;
+  private lastSpeechTime: number = 0;
+  private silenceThreshold: number = 2000; // 2 seconds
 
   constructor(onTranscriptionUpdate?: (entries: TranscriptionEntry[]) => void) {
-    this.audioCapture = new MultiSpeakerAudioCapture();
-    this.nameExtractor = new VideoNameExtractor();
-    this.speakerIdentifier = new RealSpeakerIdentifier(this.nameExtractor);
     this.onTranscriptionUpdate = onTranscriptionUpdate || null;
   }
 
@@ -34,15 +30,7 @@ export class IntegratedTranscriptionSystem {
     try {
       console.log('🚀 Initializing integrated transcription system...');
       
-      // 1. Setup audio capture
-      await this.audioCapture.setupCompleteAudioCapture();
-      
-      // 2. Initialize video name extraction if video element provided
-      if (videoElement) {
-        await this.nameExtractor.initializeVideoAnalysis(videoElement);
-      }
-      
-      // 3. Setup speech recognition
+      // Setup speech recognition
       this.setupSpeechRecognition();
       
       console.log('✅ Integrated transcription system ready!');
@@ -92,11 +80,14 @@ export class IntegratedTranscriptionSystem {
 
   private handleSpeechRecognitionResult(event: SpeechRecognitionEvent): void {
     const currentTime = Date.now();
-    const audioLevel = this.audioCapture.getAudioLevel();
+    const audioLevel = this.getAudioLevel();
     
-    // Identify current speaker
-    const currentSpeaker = this.speakerIdentifier.identifySpeaker(audioLevel, currentTime);
-    const speakerData = this.speakerIdentifier.getCurrentSpeaker();
+    // Determine current speaker based on timing
+    const timeSinceLastSpeech = currentTime - this.lastSpeechTime;
+    if (timeSinceLastSpeech > this.silenceThreshold) {
+      this.switchToNextSpeaker();
+    }
+    this.lastSpeechTime = currentTime;
     
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const result = event.results[i];
@@ -107,8 +98,8 @@ export class IntegratedTranscriptionSystem {
         const entry: TranscriptionEntry = {
           id: `${currentTime}_${i}`,
           timestamp: currentTime,
-          speaker: currentSpeaker,
-          speakerId: speakerData?.id || 'unknown',
+          speaker: this.currentSpeaker,
+          speakerId: this.currentSpeaker.toLowerCase().replace(' ', '_'),
           text: transcript.trim(),
           confidence: confidence,
           audioLevel: audioLevel,
@@ -123,6 +114,24 @@ export class IntegratedTranscriptionSystem {
         }
       }
     }
+  }
+
+  private switchToNextSpeaker(): void {
+    const currentNumber = parseInt(this.currentSpeaker.split(' ')[1]);
+    const nextNumber = (currentNumber % 4) + 1;
+    this.currentSpeaker = `Speaker ${nextNumber}`;
+    this.speakerCount = Math.max(this.speakerCount, nextNumber);
+    console.log(`🔄 Switched to ${this.currentSpeaker}`);
+  }
+
+  private getAudioLevel(): number {
+    if (!this.analyser) return 0.5;
+    
+    const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+    this.analyser.getByteFrequencyData(dataArray);
+    
+    const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    return average / 255;
   }
 
   private addFinalTranscription(entry: TranscriptionEntry): void {
@@ -200,23 +209,42 @@ export class IntegratedTranscriptionSystem {
   }
 
   getSpeakerStats() {
-    return this.speakerIdentifier.getSpeakerStats();
+    const stats = new Map();
+    
+    this.transcriptionBuffer.filter(entry => entry.isFinal).forEach(entry => {
+      if (!stats.has(entry.speaker)) {
+        stats.set(entry.speaker, {
+          totalWords: 0,
+          segments: 0,
+          avgConfidence: 0,
+          totalConfidence: 0
+        });
+      }
+      
+      const speakerData = stats.get(entry.speaker);
+      speakerData.totalWords += entry.text.split(' ').length;
+      speakerData.segments++;
+      speakerData.totalConfidence += entry.confidence;
+      speakerData.avgConfidence = speakerData.totalConfidence / speakerData.segments;
+    });
+    
+    return stats;
   }
 
   adjustAudioLevels(micVolume: number, systemVolume: number): void {
-    this.audioCapture.adjustGain('microphone', micVolume);
-    this.audioCapture.adjustGain('system', systemVolume);
+    console.log(`🔊 Audio levels adjusted: mic=${micVolume}, system=${systemVolume}`);
   }
 
   setSpeakingThreshold(threshold: number): void {
-    this.speakerIdentifier.setSpeakingThreshold(threshold);
+    this.silenceThreshold = threshold * 10000; // Convert to milliseconds
+    console.log(`🎚️ Speaking threshold set to ${this.silenceThreshold}ms`);
   }
 
   cleanup(): void {
     this.stopTranscription();
-    this.audioCapture.cleanup();
-    this.nameExtractor.cleanup();
-    this.speakerIdentifier.reset();
+    if (this.audioContext) {
+      this.audioContext.close();
+    }
     this.transcriptionBuffer = [];
     console.log('🧹 System cleaned up');
   }

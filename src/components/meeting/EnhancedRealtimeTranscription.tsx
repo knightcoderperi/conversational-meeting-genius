@@ -6,7 +6,18 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Mic, MicOff, Volume2, Settings, Users, Zap } from 'lucide-react';
-import { IntegratedTranscriptionSystem, TranscriptionEntry } from '@/utils/integratedTranscriptionSystem';
+import { supabase } from '@/integrations/supabase/client';
+
+interface TranscriptionEntry {
+  id: string;
+  timestamp: number;
+  speaker: string;
+  speakerId: string;
+  text: string;
+  confidence: number;
+  audioLevel: number;
+  isFinal: boolean;
+}
 
 interface EnhancedRealtimeTranscriptionProps {
   meetingId: string | null;
@@ -24,25 +35,19 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
   const [transcriptionEntries, setTranscriptionEntries] = useState<TranscriptionEntry[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [micVolume, setMicVolume] = useState([1.0]);
-  const [systemVolume, setSystemVolume] = useState([1.2]);
-  const [speakingThreshold, setSpeakingThreshold] = useState([0.1]);
-  const [systemStatus, setSystemStatus] = useState<{
-    audioCapture: boolean;
-    nameExtraction: boolean;
-    speakerIdentification: boolean;
-  }>({
-    audioCapture: false,
-    nameExtraction: false,
-    speakerIdentification: false
-  });
+  const [currentSpeaker, setCurrentSpeaker] = useState('Speaker 1');
+  const [speakerCount, setSpeakerCount] = useState(1);
+  const [currentInterimText, setCurrentInterimText] = useState('');
 
-  const transcriptionSystemRef = useRef<IntegratedTranscriptionSystem | null>(null);
-  const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const lastSpeechTime = useRef<number>(0);
+  const silenceThreshold = 2000; // 2 seconds of silence to switch speakers
 
   useEffect(() => {
     if (isRecording && mediaStream && meetingId) {
-      initializeEnhancedTranscription();
+      initializeTranscription();
     } else {
       cleanupTranscription();
     }
@@ -52,94 +57,188 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
     };
   }, [isRecording, mediaStream, meetingId]);
 
-  const initializeEnhancedTranscription = async () => {
+  const initializeTranscription = async () => {
     try {
-      console.log('🚀 Initializing enhanced transcription system...');
+      console.log('🚀 Initializing enhanced transcription...');
       
-      // Create video element if we need to capture screen content
-      if (!videoElementRef.current) {
-        videoElementRef.current = document.createElement('video');
-        videoElementRef.current.style.display = 'none';
-        document.body.appendChild(videoElementRef.current);
+      // Setup audio analysis for speaker detection
+      if (mediaStream) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const source = audioContextRef.current.createMediaStreamSource(mediaStream);
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.fftSize = 256;
+        source.connect(analyserRef.current);
         
-        // Try to get screen capture for name extraction
-        if (mediaStream) {
-          const videoTracks = mediaStream.getVideoTracks();
-          if (videoTracks.length > 0) {
-            const videoStream = new MediaStream([videoTracks[0]]);
-            videoElementRef.current.srcObject = videoStream;
-            videoElementRef.current.play();
-          }
-        }
+        console.log('✅ Audio analysis setup complete');
       }
 
-      // Initialize transcription system
-      transcriptionSystemRef.current = new IntegratedTranscriptionSystem((entries) => {
-        setTranscriptionEntries(entries);
-        onTranscriptionUpdate(entries);
-      });
-
-      await transcriptionSystemRef.current.initialize(videoElementRef.current);
-      
-      // Update system status
-      setSystemStatus({
-        audioCapture: true,
-        nameExtraction: true,
-        speakerIdentification: true
-      });
-
-      await transcriptionSystemRef.current.startTranscription();
-      setIsConnected(true);
-      
-      console.log('✅ Enhanced transcription system active!');
+      // Setup speech recognition
+      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognitionRef.current = new SpeechRecognitionConstructor();
+        
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = 'en-US';
+        recognitionRef.current.maxAlternatives = 1;
+        
+        recognitionRef.current.onstart = () => {
+          console.log('🎤 Speech recognition started');
+          setIsConnected(true);
+        };
+        
+        recognitionRef.current.onresult = (event) => {
+          handleSpeechRecognitionResult(event);
+        };
+        
+        recognitionRef.current.onerror = (event) => {
+          console.error('❌ Speech recognition error:', event.error);
+          
+          // Auto-restart on certain errors
+          if (event.error === 'network' || event.error === 'no-speech') {
+            setTimeout(() => {
+              if (isRecording && recognitionRef.current) {
+                recognitionRef.current.start();
+              }
+            }, 1000);
+          }
+        };
+        
+        recognitionRef.current.onend = () => {
+          console.log('🔄 Speech recognition ended, restarting...');
+          // Auto-restart if still recording
+          if (isRecording && recognitionRef.current) {
+            setTimeout(() => {
+              recognitionRef.current!.start();
+            }, 100);
+          }
+        };
+        
+        recognitionRef.current.start();
+        console.log('✅ Speech recognition initialized');
+        
+      } else {
+        console.error('❌ Speech recognition not supported');
+        throw new Error('Speech recognition not supported in this browser');
+      }
 
     } catch (error) {
-      console.error('❌ Enhanced transcription initialization failed:', error);
-      setSystemStatus({
-        audioCapture: false,
-        nameExtraction: false,
-        speakerIdentification: false
-      });
+      console.error('❌ Transcription initialization failed:', error);
+      setIsConnected(false);
+    }
+  };
+
+  const handleSpeechRecognitionResult = (event: SpeechRecognitionEvent) => {
+    const currentTime = Date.now();
+    const audioLevel = getAudioLevel();
+    
+    // Determine current speaker based on timing
+    const timeSinceLastSpeech = currentTime - lastSpeechTime.current;
+    if (timeSinceLastSpeech > silenceThreshold) {
+      // Switch to next speaker after silence
+      switchToNextSpeaker();
+    }
+    lastSpeechTime.current = currentTime;
+    
+    let interimTranscript = '';
+    let finalTranscript = '';
+    
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      const transcript = result[0].transcript;
+      const confidence = result[0].confidence || 0.85;
+      
+      if (result.isFinal) {
+        finalTranscript += transcript;
+        
+        // Create final transcription entry
+        const entry: TranscriptionEntry = {
+          id: `${currentTime}_${i}`,
+          timestamp: currentTime,
+          speaker: currentSpeaker,
+          speakerId: currentSpeaker.toLowerCase().replace(' ', '_'),
+          text: transcript.trim(),
+          confidence: confidence,
+          audioLevel: audioLevel,
+          isFinal: true
+        };
+        
+        if (transcript.trim()) {
+          addTranscriptionEntry(entry);
+          console.log(`💬 ${currentSpeaker}: ${transcript.trim()}`);
+        }
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+    
+    // Update interim text display
+    setCurrentInterimText(interimTranscript);
+  };
+
+  const getAudioLevel = (): number => {
+    if (!analyserRef.current) return 0;
+    
+    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+    analyserRef.current.getByteFrequencyData(dataArray);
+    
+    const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    return average / 255;
+  };
+
+  const switchToNextSpeaker = () => {
+    const nextSpeakerNumber = (parseInt(currentSpeaker.split(' ')[1]) % 4) + 1;
+    const nextSpeaker = `Speaker ${nextSpeakerNumber}`;
+    setCurrentSpeaker(nextSpeaker);
+    setSpeakerCount(Math.max(speakerCount, nextSpeakerNumber));
+    console.log(`🔄 Switched to ${nextSpeaker}`);
+  };
+
+  const addTranscriptionEntry = (entry: TranscriptionEntry) => {
+    setTranscriptionEntries(prev => {
+      const updated = [...prev, entry];
+      onTranscriptionUpdate(updated);
+      
+      // Save to database
+      if (meetingId) {
+        saveTranscriptionEntry(entry);
+      }
+      
+      return updated;
+    });
+  };
+
+  const saveTranscriptionEntry = async (entry: TranscriptionEntry) => {
+    try {
+      await supabase
+        .from('transcription_segments')
+        .insert({
+          meeting_id: meetingId,
+          speaker_name: entry.speaker,
+          speaker_id: entry.speakerId,
+          text: entry.text,
+          start_time: entry.timestamp / 1000,
+          end_time: (entry.timestamp / 1000) + 3,
+          confidence: entry.confidence,
+          is_final: entry.isFinal
+        });
+    } catch (error) {
+      console.error('Error saving transcription:', error);
     }
   };
 
   const cleanupTranscription = () => {
-    if (transcriptionSystemRef.current) {
-      transcriptionSystemRef.current.cleanup();
-      transcriptionSystemRef.current = null;
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
-    
-    if (videoElementRef.current) {
-      document.body.removeChild(videoElementRef.current);
-      videoElementRef.current = null;
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
     }
-    
     setIsConnected(false);
-    setTranscriptionEntries([]);
-    setSystemStatus({
-      audioCapture: false,
-      nameExtraction: false,
-      speakerIdentification: false
-    });
-  };
-
-  const handleVolumeChange = (type: 'mic' | 'system', value: number[]) => {
-    if (transcriptionSystemRef.current) {
-      if (type === 'mic') {
-        setMicVolume(value);
-        transcriptionSystemRef.current.adjustAudioLevels(value[0], systemVolume[0]);
-      } else {
-        setSystemVolume(value);
-        transcriptionSystemRef.current.adjustAudioLevels(micVolume[0], value[0]);
-      }
-    }
-  };
-
-  const handleThresholdChange = (value: number[]) => {
-    setSpeakingThreshold(value);
-    if (transcriptionSystemRef.current) {
-      transcriptionSystemRef.current.setSpeakingThreshold(value[0]);
-    }
+    setCurrentInterimText('');
+    console.log('🧹 Transcription cleaned up');
   };
 
   const getSpeakerColor = (speaker: string) => {
@@ -149,27 +248,11 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
       'Speaker 3': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
       'Speaker 4': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
     };
-    
-    // Generate color based on speaker name hash
-    const hash = speaker.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    
-    const colorIndex = Math.abs(hash) % 5;
-    const colorOptions = [
-      'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-      'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
-      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
-      'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
-      'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300'
-    ];
-    
-    return colors[speaker as keyof typeof colors] || colorOptions[colorIndex];
+    return colors[speaker as keyof typeof colors] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300';
   };
 
-  const getStatusIcon = (status: boolean) => {
-    return status ? '✅' : '❌';
+  const forceSpeakerSwitch = () => {
+    switchToNextSpeaker();
   };
 
   return (
@@ -191,7 +274,7 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
             {isRecording && isConnected ? (
               <Badge variant="default" className="bg-green-600">
                 <Volume2 className="w-3 h-3 mr-1" />
-                Enhanced Active
+                Active
               </Badge>
             ) : (
               <Badge variant="secondary">
@@ -202,19 +285,24 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
           </div>
         </CardTitle>
         
-        {/* System Status Indicators */}
-        <div className="flex items-center space-x-4 text-xs">
-          <div className="flex items-center space-x-1">
-            <span>{getStatusIcon(systemStatus.audioCapture)}</span>
-            <span>Multi-Audio</span>
+        {/* Current Speaker & Controls */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Badge variant="outline" className={getSpeakerColor(currentSpeaker)}>
+              <Users className="w-3 h-3 mr-1" />
+              Current: {currentSpeaker}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={forceSpeakerSwitch}
+              disabled={!isRecording}
+            >
+              Switch Speaker
+            </Button>
           </div>
-          <div className="flex items-center space-x-1">
-            <span>{getStatusIcon(systemStatus.nameExtraction)}</span>
-            <span>Name Extract</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <span>{getStatusIcon(systemStatus.speakerIdentification)}</span>
-            <span>Speaker ID</span>
+          <div className="text-xs text-gray-500">
+            {speakerCount} speakers identified
           </div>
         </div>
       </CardHeader>
@@ -223,45 +311,17 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
         {/* Settings Panel */}
         {showSettings && (
           <div className="p-4 border-b bg-gray-50 dark:bg-gray-800 space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Microphone Volume: {micVolume[0].toFixed(1)}</label>
-              <Slider
-                value={micVolume}
-                onValueChange={(value) => handleVolumeChange('mic', value)}
-                max={2}
-                min={0}
-                step={0.1}
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">System Audio Volume: {systemVolume[0].toFixed(1)}</label>
-              <Slider
-                value={systemVolume}
-                onValueChange={(value) => handleVolumeChange('system', value)}
-                max={2}
-                min={0}
-                step={0.1}
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Speaking Threshold: {speakingThreshold[0].toFixed(2)}</label>
-              <Slider
-                value={speakingThreshold}
-                onValueChange={handleThresholdChange}
-                max={0.5}
-                min={0.01}
-                step={0.01}
-                className="w-full"
-              />
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              <p>• Automatic speaker detection based on speech patterns</p>
+              <p>• Use "Switch Speaker" button to manually change speakers</p>
+              <p>• System detects new speakers after 2 seconds of silence</p>
             </div>
           </div>
         )}
         
         {/* Transcription Display */}
         <ScrollArea className="h-64 p-4">
-          {transcriptionEntries.length > 0 ? (
+          {transcriptionEntries.length > 0 || currentInterimText ? (
             <div className="space-y-4">
               {transcriptionEntries.map((entry) => (
                 <div key={entry.id} className="space-y-2">
@@ -274,14 +334,9 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
                       <span>{new Date(entry.timestamp).toLocaleTimeString()}</span>
                       <span>•</span>
                       <span>{Math.round(entry.confidence * 100)}%</span>
-                      {!entry.isFinal && <Badge variant="secondary" className="text-xs">Live</Badge>}
                     </div>
                   </div>
-                  <p className={`text-sm leading-relaxed ${
-                    entry.isFinal 
-                      ? 'text-gray-700 dark:text-gray-300' 
-                      : 'text-gray-600 dark:text-gray-400 italic opacity-70'
-                  }`}>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                     {entry.text}
                   </p>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1">
@@ -292,23 +347,39 @@ export const EnhancedRealtimeTranscription: React.FC<EnhancedRealtimeTranscripti
                   </div>
                 </div>
               ))}
+              
+              {/* Live interim text */}
+              {currentInterimText && (
+                <div className="space-y-2 opacity-70">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300">
+                      <Users className="w-3 h-3 mr-1" />
+                      {currentSpeaker} (Live)
+                    </Badge>
+                    <span className="text-xs text-gray-500">Speaking...</span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 italic leading-relaxed">
+                    {currentInterimText}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Zap className="w-12 h-12 text-blue-500 mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {isRecording && isConnected ? 'Enhanced System Ready' : 'Enhanced Transcription Ready'}
+                {isRecording && isConnected ? 'Listening for Speech...' : 'Ready to Transcribe'}
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
                 {isRecording && isConnected
-                  ? 'Multi-speaker audio capture active • Video name extraction running • Real speaker identification enabled'
-                  : 'Start recording to enable enhanced transcription features'
+                  ? 'Start speaking to see live transcription with automatic speaker detection'
+                  : 'Click record to begin enhanced transcription'
                 }
               </p>
               <div className="text-xs text-gray-500 space-y-1">
-                <div>🎤 Complete multi-speaker audio capture</div>
-                <div>🎥 Video-based name extraction</div>
-                <div>👤 Real speaker identification</div>
+                <div>🎤 Real-time speech recognition</div>
+                <div>👤 Automatic speaker switching</div>
+                <div>💬 Live transcript display</div>
               </div>
             </div>
           )}
