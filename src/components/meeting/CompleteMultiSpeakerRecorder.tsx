@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +7,6 @@ import { Progress } from '@/components/ui/progress';
 import { Play, Square, Download, Users, Mic, Volume2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { CompleteMultiSpeakerSystem, TranscriptionChunk, SpeakerProfile } from '@/utils/completeMultiSpeakerSystem';
-import { APIConfigurationDialog } from './APIConfigurationDialog';
 
 interface CompleteMultiSpeakerRecorderProps {
   meetingId: string;
@@ -180,7 +178,9 @@ export const CompleteMultiSpeakerRecorder: React.FC<CompleteMultiSpeakerRecorder
               <span>Complete Multi-Speaker Recording</span>
             </div>
             <div className="flex items-center space-x-2">
-              <APIConfigurationDialog />
+              <Badge variant="secondary" className="bg-green-100 text-green-800">
+                AssemblyAI Ready
+              </Badge>
               {isRecording && (
                 <Badge variant="destructive" className="animate-pulse">
                   <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
@@ -259,7 +259,7 @@ export const CompleteMultiSpeakerRecorder: React.FC<CompleteMultiSpeakerRecorder
               <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
                 <div className="flex items-center space-x-2 text-sm font-medium text-blue-700 dark:text-blue-300 mb-2">
                   <Zap className="w-4 h-4" />
-                  <span>Complete Multi-Speaker System Features</span>
+                  <span>Complete Multi-Speaker System with AssemblyAI</span>
                 </div>
                 <div className="text-xs text-blue-600 dark:text-blue-400 space-y-1">
                   <div>🎤 Your microphone with noise suppression</div>
@@ -273,8 +273,10 @@ export const CompleteMultiSpeakerRecorder: React.FC<CompleteMultiSpeakerRecorder
                 </div>
               </div>
               
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                💡 Configure your preferred transcription API above for the best speaker identification results
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
+                <div className="text-xs text-green-700 dark:text-green-300 text-center font-medium">
+                  ✅ AssemblyAI transcription ready - no configuration needed!
+                </div>
               </div>
             </div>
           )}

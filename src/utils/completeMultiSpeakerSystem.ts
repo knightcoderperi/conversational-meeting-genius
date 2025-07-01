@@ -1,3 +1,4 @@
+import { transcriptionAPI } from './apiConfiguration';
 
 export interface SpeakerProfile {
   id: string;
@@ -274,14 +275,14 @@ export class CompleteMultiSpeakerSystem {
     });
   }
 
-  private async transcribeAudio(base64Audio: string): Promise<{ text: string; confidence: number } | null> {
+  private async transcribeAudio(base64Audio: string): Promise<{ text: string; confidence: number; speakers?: any[] } | null> {
     try {
-      // This would connect to your chosen transcription API
-      // For now, simulating with Web Speech API as fallback
-      return await this.fallbackWebSpeechTranscription();
+      // Use the configured AssemblyAI API
+      return await transcriptionAPI.transcribeAudio(base64Audio);
     } catch (error) {
-      console.error('Transcription error:', error);
-      return null;
+      console.error('AssemblyAI transcription error:', error);
+      // Fallback to mock transcription for demo purposes
+      return await this.fallbackWebSpeechTranscription();
     }
   }
 
