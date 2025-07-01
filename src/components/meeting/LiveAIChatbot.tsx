@@ -41,6 +41,9 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
   const [meetingContext, setMeetingContext] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // OpenRouter API key for general questions
+  const openRouterApiKey = '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';
+
   // Quick action buttons for meeting analysis
   const quickQueries = [
     "📝 Summarize key points",
@@ -83,26 +86,59 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     return !meetingKeywords.some(keyword => lowerMessage.includes(keyword));
   };
 
-  const callGroqAPI = async (message: string, context?: string): Promise<string> => {
+  const callOpenRouterAPI = async (message: string): Promise<string> => {
     try {
-      const response = await fetch(`https://iofshnigmuxlxciymldk.supabase.co/functions/v1/ai-chat`, {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${openRouterApiKey}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvZnNobmlnbXV4bHhjaXltbGRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEwMTE2NjIsImV4cCI6MjA2NjU4NzY2Mn0.FRW2owD1YTrEeXQNrH3f-7lJ-Nb0SbhkmyaAajDYn1o`,
+          'HTTP-Referer': 'https://lovable.dev',
+          'X-Title': 'Meeting AI Assistant'
         },
         body: JSON.stringify({
-          message,
-          context: context || null
+          model: 'meta-llama/llama-3.1-8b-instruct:free',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a helpful AI assistant. Answer the user\'s question using your general knowledge. Be helpful, accurate, and conversational.'
+            },
+            {
+              role: 'user',
+              content: message
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 1000,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`API call failed: ${response.status}`);
+        throw new Error(`OpenRouter API call failed: ${response.status}`);
       }
 
       const data = await response.json();
-      return data.response;
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('Error calling OpenRouter API:', error);
+      throw error;
+    }
+  };
+
+  const callGroqAPI = async (message: string, context: string): Promise<string> => {
+    try {
+      const response = await supabase.functions.invoke('ai-chat', {
+        body: {
+          message,
+          context
+        }
+      });
+
+      if (response.error) {
+        throw new Error(`Groq API call failed: ${response.error.message}`);
+      }
+
+      return response.data.response;
     } catch (error) {
       console.error('Error calling Groq API:', error);
       throw error;
@@ -128,14 +164,14 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
 
       // Check if it's a general question or meeting-related
       if (isGeneralQuestion(message) || !meetingContext.trim()) {
-        // Use Groq API for general questions
-        aiResponse = await callGroqAPI(message, meetingContext.trim() || undefined);
+        // Use OpenRouter API for general questions
+        aiResponse = await callOpenRouterAPI(message);
         isGeneral = true;
-        console.log('Using Groq API for general question');
+        console.log('Using OpenRouter API for general question');
       } else {
-        // Use local analysis for meeting-related questions
-        aiResponse = await generateMeetingResponse(message, meetingContext);
-        console.log('Using local analysis for meeting question');
+        // Use Groq API for meeting-related questions
+        aiResponse = await callGroqAPI(message, meetingContext);
+        console.log('Using Groq API for meeting question');
       }
       
       const aiMessage: ChatMessage = {
@@ -168,137 +204,6 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const generateMeetingResponse = async (query: string, context: string): Promise<string> => {
-    // If we have meeting context, try Groq API first for better responses
-    if (context.trim()) {
-      try {
-        return await callGroqAPI(query, context);
-      } catch (error) {
-        console.log('Groq API failed, falling back to local analysis');
-      }
-    }
-
-    // Fallback to local pattern matching
-    const lowerQuery = query.toLowerCase();
-    
-    if (lowerQuery.includes('summarize') || lowerQuery.includes('summary')) {
-      return generateSummary(context);
-    } else if (lowerQuery.includes('action item')) {
-      return extractActionItems(context);
-    } else if (lowerQuery.includes('who spoke') || lowerQuery.includes('speaker')) {
-      return analyzeSpeakers(context);
-    } else if (lowerQuery.includes('decision') || lowerQuery.includes('conclude')) {
-      return extractDecisions(context);
-    } else if (lowerQuery.includes('topic') || lowerQuery.includes('subject')) {
-      return extractTopics(context);
-    } else if (lowerQuery.includes('timeline') || lowerQuery.includes('when')) {
-      return generateTimeline(context);
-    } else {
-      return searchContent(query, context);
-    }
-  };
-
-  const generateSummary = (context: string): string => {
-    const lines = context.split('\n').filter(line => line.trim());
-    if (lines.length === 0) return "No meeting content available yet.";
-    
-    const speakers = [...new Set(lines.map(line => line.split(': ')[0]?.split('] ')[1]).filter(Boolean))];
-    const keyPoints = lines.slice(-10).map(line => line.split(': ').slice(1).join(': ')).filter(Boolean);
-    
-    return `📝 **Meeting Summary**\n\n**Participants:** ${speakers.join(', ')}\n\n**Recent Discussion Points:**\n${keyPoints.map(point => `• ${point}`).join('\n')}\n\n**Duration:** ${lines.length} segments recorded`;
-  };
-
-  const extractActionItems = (context: string): string => {
-    const lines = context.split('\n');
-    const actionWords = ['will', 'should', 'need to', 'must', 'action', 'task', 'follow up', 'next step'];
-    
-    const actionItems = lines.filter(line => 
-      actionWords.some(word => line.toLowerCase().includes(word))
-    ).slice(-5);
-    
-    if (actionItems.length === 0) {
-      return "✅ No clear action items identified yet. Continue the meeting for more specific tasks.";
-    }
-    
-    return `✅ **Action Items Identified:**\n\n${actionItems.map((item, index) => `${index + 1}. ${item.split(': ').slice(1).join(': ')}`).join('\n')}`;
-  };
-
-  const analyzeSpeakers = (context: string): string => {
-    const lines = context.split('\n').filter(line => line.trim());
-    const speakerCounts: { [key: string]: number } = {};
-    
-    lines.forEach(line => {
-      const speaker = line.split(': ')[0]?.split('] ')[1];
-      if (speaker) {
-        speakerCounts[speaker] = (speakerCounts[speaker] || 0) + 1;
-      }
-    });
-    
-    const sortedSpeakers = Object.entries(speakerCounts)
-      .sort(([,a], [,b]) => b - a);
-    
-    return `👥 **Speaker Analysis:**\n\n${sortedSpeakers.map(([speaker, count]) => `• **${speaker}**: ${count} segments (${Math.round((count / lines.length) * 100)}%)`).join('\n')}`;
-  };
-
-  const extractDecisions = (context: string): string => {
-    const lines = context.split('\n');
-    const decisionWords = ['decided', 'agreed', 'concluded', 'final', 'approve', 'reject'];
-    
-    const decisions = lines.filter(line => 
-      decisionWords.some(word => line.toLowerCase().includes(word))
-    ).slice(-3);
-    
-    if (decisions.length === 0) {
-      return "💡 No clear decisions identified yet in the meeting.";
-    }
-    
-    return `💡 **Key Decisions:**\n\n${decisions.map((decision, index) => `${index + 1}. ${decision.split(': ').slice(1).join(': ')}`).join('\n')}`;
-  };
-
-  const extractTopics = (context: string): string => {
-    const text = context.toLowerCase();
-    const commonWords = ['the', 'is', 'at', 'which', 'on', 'and', 'a', 'to', 'are', 'as', 'were', 'been', 'be', 'have', 'has', 'had'];
-    
-    const words = text.split(/\W+/).filter(word => 
-      word.length > 4 && !commonWords.includes(word)
-    );
-    
-    const wordCount: { [key: string]: number } = {};
-    words.forEach(word => {
-      wordCount[word] = (wordCount[word] || 0) + 1;
-    });
-    
-    const topTopics = Object.entries(wordCount)
-      .sort(([,a], [,b]) => b - a)
-      .slice(0, 8)
-      .map(([word]) => word);
-    
-    return `🔍 **Key Topics Discussed:**\n\n${topTopics.map(topic => `• ${topic.charAt(0).toUpperCase() + topic.slice(1)}`).join('\n')}`;
-  };
-
-  const generateTimeline = (context: string): string => {
-    const lines = context.split('\n').filter(line => line.trim()).slice(-10);
-    
-    return `⏱️ **Recent Meeting Timeline:**\n\n${lines.map((line, index) => {
-      const timestamp = line.match(/\[(.*?)\]/)?.[1] || 'Unknown time';
-      const content = line.split(': ').slice(1).join(': ');
-      return `${index + 1}. **${timestamp}** - ${content}`;
-    }).join('\n')}`;
-  };
-
-  const searchContent = (query: string, context: string): string => {
-    const lines = context.split('\n');
-    const matchingLines = lines.filter(line => 
-      line.toLowerCase().includes(query.toLowerCase())
-    ).slice(-5);
-    
-    if (matchingLines.length === 0) {
-      return `🔍 No mentions of "${query}" found in the current meeting transcript.`;
-    }
-    
-    return `🔍 **Search Results for "${query}":**\n\n${matchingLines.map((line, index) => `${index + 1}. ${line.split(': ').slice(1).join(': ')}`).join('\n')}`;
   };
 
   const saveChatMessage = async (meetingId: string, message: string, aiResponse: string) => {
@@ -336,14 +241,14 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span>AI Assistant</span>
+            <span>Enhanced AI Assistant</span>
           </div>
           <div className="flex items-center space-x-2">
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
               {transcriptionHistory.length} segments
             </Badge>
             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-              Enhanced AI
+              Dual AI
             </Badge>
           </div>
         </CardTitle>
@@ -377,9 +282,15 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                   Enhanced AI Assistant Ready
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
                   Ask about your meeting or any general questions
                 </p>
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
+                  <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                    <div>🎯 <strong>Meeting Questions:</strong> Uses Groq AI with your meeting context</div>
+                    <div>🌍 <strong>General Questions:</strong> Uses OpenRouter AI for any topic</div>
+                  </div>
+                </div>
               </div>
             )}
             
@@ -399,11 +310,9 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                     {message.type === 'ai' && (
                       <div className="flex items-center space-x-1">
                         <Bot className="w-4 h-4 mt-1 flex-shrink-0" />
-                        {message.isGeneral && (
-                          <Badge variant="secondary" className="text-xs">
-                            General AI
-                          </Badge>
-                        )}
+                        <Badge variant="secondary" className="text-xs">
+                          {message.isGeneral ? 'General AI' : 'Meeting AI'}
+                        </Badge>
                       </div>
                     )}
                     {message.type === 'user' && (
@@ -459,7 +368,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             </Button>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            💡 Can answer both meeting-related and general questions
+            💡 Meeting questions use Groq AI • General questions use OpenRouter AI
           </p>
         </div>
       </CardContent>
