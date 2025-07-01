@@ -1,4 +1,3 @@
-
 export class MultiSpeakerAudioCapture {
   private audioContext: AudioContext | null = null;
   private mixedStream: MediaStream | null = null;
@@ -23,8 +22,7 @@ export class MultiSpeakerAudioCapture {
           autoGainControl: true,
           sampleRate: 48000,
           channelCount: 2,
-          sampleSize: 16,
-          latency: 0.01 // Low latency for real-time
+          sampleSize: 16
         }
       });
 
@@ -36,8 +34,7 @@ export class MultiSpeakerAudioCapture {
           noiseSuppression: false, // Preserve all remote voices
           sampleRate: 48000,
           channelCount: 2,
-          autoGainControl: false, // Don't modify remote audio levels
-          suppressLocalAudioPlayback: false // Ensure we capture everything
+          autoGainControl: false // Don't modify remote audio levels
         },
         video: false // We only need audio from this stream
       });
