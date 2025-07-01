@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -84,11 +85,11 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
 
   const callGroqAPI = async (message: string, context?: string): Promise<string> => {
     try {
-      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/ai-chat`, {
+      const response = await fetch(`https://iofshnigmuxlxciymldk.supabase.co/functions/v1/ai-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvZnNobmlnbXV4bHhjaXltbGRrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTEwMTE2NjIsImV4cCI6MjA2NjU4NzY2Mn0.FRW2owD1YTrEeXQNrH3f-7lJ-Nb0SbhkmyaAajDYn1o`,
         },
         body: JSON.stringify({
           message,
