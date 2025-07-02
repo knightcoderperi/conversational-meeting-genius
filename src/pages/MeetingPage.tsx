@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { CompleteMultiSpeakerRecorder } from '@/components/meeting/CompleteMultiSpeakerRecorder';
+import { PerfectRecordingSystem } from '@/components/meeting/PerfectRecordingSystem';
 import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
@@ -147,7 +147,7 @@ export const MeetingPage = () => {
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Left Column - Complete Multi-Speaker Recording */}
           <div className="space-y-6">
-            <CompleteMultiSpeakerRecorder
+            <PerfectRecordingSystem
               meetingId={meeting.id}
               onRecordingStateChange={handleRecordingStateChange}
             />
