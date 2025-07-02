@@ -79,6 +79,7 @@ export class CompleteMultiSpeakerSystem {
       console.log('🚀 Setting up complete multi-speaker audio capture...');
 
       // 1. Capture high-quality microphone (your voice)
+      console.log('📱 Requesting microphone access...');
       this.micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -88,8 +89,10 @@ export class CompleteMultiSpeakerSystem {
           channelCount: 2
         }
       });
+      console.log('✅ Microphone captured successfully');
 
       // 2. Capture complete system audio (ALL other participants)
+      console.log('🖥️ Requesting system audio access...');
       this.systemStream = await navigator.mediaDevices.getDisplayMedia({
         audio: {
           echoCancellation: false,
@@ -100,12 +103,17 @@ export class CompleteMultiSpeakerSystem {
         },
         video: false
       });
+      console.log('✅ System audio captured successfully');
 
       // 3. Create mixed audio stream
+      console.log('🎛️ Creating mixed audio stream...');
       await this.createMixedAudioStream();
+      console.log('✅ Mixed audio stream created');
 
       // 4. Setup audio level monitoring
+      console.log('📊 Setting up audio monitoring...');
       this.setupAudioMonitoring();
+      console.log('✅ Audio monitoring active');
 
       console.log('✅ Complete audio capture setup successful!');
       console.log(`📊 Mic tracks: ${this.micStream.getAudioTracks().length}`);
@@ -123,9 +131,16 @@ export class CompleteMultiSpeakerSystem {
       throw new Error('Audio context or streams not initialized');
     }
 
+    console.log('🎚️ Audio context state:', this.audioContext.state);
+    if (this.audioContext.state === 'suspended') {
+      console.log('🔄 Resuming audio context...');
+      await this.audioContext.resume();
+    }
+
     const destination = this.audioContext.createMediaStreamDestination();
 
     // Process microphone audio
+    console.log('🎤 Processing microphone audio...');
     const micSource = this.audioContext.createMediaStreamSource(this.micStream);
     const micGain = this.audioContext.createGain();
     micGain.gain.value = 1.0;
@@ -133,6 +148,7 @@ export class CompleteMultiSpeakerSystem {
     micGain.connect(destination);
 
     // Process system audio
+    console.log('🔊 Processing system audio...');
     const systemSource = this.audioContext.createMediaStreamSource(this.systemStream);
     const systemGain = this.audioContext.createGain();
     systemGain.gain.value = 1.2; // Slight boost for remote participants
@@ -140,6 +156,7 @@ export class CompleteMultiSpeakerSystem {
     systemGain.connect(destination);
 
     this.combinedStream = destination.stream;
+    console.log('✅ Combined stream ready with', this.combinedStream.getAudioTracks().length, 'tracks');
   }
 
   private setupAudioMonitoring(): void {

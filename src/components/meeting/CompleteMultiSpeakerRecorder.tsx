@@ -83,33 +83,59 @@ export const CompleteMultiSpeakerRecorder: React.FC<CompleteMultiSpeakerRecorder
     if (!systemRef.current) return;
 
     try {
+      console.log('🔧 Starting audio capture setup...');
       toast.loading('Setting up complete audio capture...');
       await systemRef.current.setupCompleteAudioCapture();
       setIsSetup(true);
       toast.dismiss();
       toast.success('✅ Complete audio capture ready! All speakers will be recorded.');
+      console.log('✅ Audio capture setup completed successfully');
     } catch (error) {
       toast.dismiss();
-      toast.error('Failed to setup audio capture. Please check permissions.');
-      console.error('Setup error:', error);
+      toast.error(`Failed to setup audio capture: ${error.message}`);
+      console.error('❌ Setup error:', error);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
     }
   };
 
   const startRecording = async () => {
-    if (!systemRef.current || !isSetup) {
+    console.log('🎬 Starting recording process...');
+    
+    if (!systemRef.current) {
+      console.error('❌ System reference is null');
+      toast.error('System not initialized');
+      return;
+    }
+
+    if (!isSetup) {
+      console.log('⚙️ Setup required, initializing audio capture...');
       await setupAudioCapture();
-      if (!isSetup) return;
+      if (!isSetup) {
+        console.error('❌ Setup failed, cannot start recording');
+        return;
+      }
     }
 
     try {
+      console.log('🎙️ Calling startRecording on system...');
       await systemRef.current.startRecording();
       setIsRecording(true);
       setRecordingTime(0);
       onRecordingStateChange(true);
       toast.success('🎙️ Recording started - capturing ALL speakers!');
+      console.log('✅ Recording started successfully');
     } catch (error) {
-      toast.error('Failed to start recording');
-      console.error('Recording error:', error);
+      toast.error(`Failed to start recording: ${error.message}`);
+      console.error('❌ Recording start error:', error);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
     }
   };
 
