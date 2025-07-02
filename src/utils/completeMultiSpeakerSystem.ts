@@ -80,30 +80,42 @@ export class CompleteMultiSpeakerSystem {
 
       // 1. Capture high-quality microphone (your voice)
       console.log('📱 Requesting microphone access...');
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: this.config.sampleRate,
-          channelCount: 2
-        }
-      });
-      console.log('✅ Microphone captured successfully');
+      try {
+        this.micStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: this.config.sampleRate,
+            channelCount: 2
+          }
+        });
+        console.log('✅ Microphone captured successfully');
+      } catch (micError) {
+        console.error('❌ Microphone access failed:', micError);
+        throw new Error(`Microphone permission denied. Please allow microphone access and try again.`);
+      }
 
-      // 2. Capture complete system audio (ALL other participants)
+      // 2. Try to capture complete system audio (ALL other participants)
       console.log('🖥️ Requesting system audio access...');
-      this.systemStream = await navigator.mediaDevices.getDisplayMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          sampleRate: this.config.sampleRate,
-          channelCount: 2
-        },
-        video: false
-      });
-      console.log('✅ System audio captured successfully');
+      try {
+        this.systemStream = await navigator.mediaDevices.getDisplayMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            sampleRate: this.config.sampleRate,
+            channelCount: 2
+          },
+          video: false
+        });
+        console.log('✅ System audio captured successfully');
+      } catch (systemError) {
+        console.warn('⚠️ System audio capture failed, using microphone-only mode:', systemError);
+        // Create a silent system stream as fallback
+        this.systemStream = await this.createSilentAudioStream();
+        console.log('✅ Fallback to microphone-only recording');
+      }
 
       // 3. Create mixed audio stream
       console.log('🎛️ Creating mixed audio stream...');
@@ -122,8 +134,40 @@ export class CompleteMultiSpeakerSystem {
 
     } catch (error) {
       console.error('❌ Audio capture setup failed:', error);
-      throw new Error(`Complete audio setup failed: ${error.message}`);
+      
+      // Provide specific error messages based on error type
+      if (error.name === 'NotAllowedError') {
+        throw new Error('Permission denied. Please allow microphone and screen sharing access, then try again.');
+      } else if (error.name === 'NotFoundError') {
+        throw new Error('No microphone found. Please connect a microphone and try again.');
+      } else if (error.name === 'NotSupportedError') {
+        throw new Error('Your browser does not support audio recording. Please use Chrome, Firefox, or Edge.');
+      } else if (error.name === 'AbortError') {
+        throw new Error('Audio capture was cancelled. Please try again.');
+      } else {
+        throw new Error(`Audio setup failed: ${error.message}`);
+      }
     }
+  }
+
+  private async createSilentAudioStream(): Promise<MediaStream> {
+    // Create a silent audio stream as fallback when system audio fails
+    if (!this.audioContext) {
+      throw new Error('Audio context not initialized');
+    }
+
+    const oscillator = this.audioContext.createOscillator();
+    const gainNode = this.audioContext.createGain();
+    const destination = this.audioContext.createMediaStreamDestination();
+
+    oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
+    gainNode.gain.setValueAtTime(0, this.audioContext.currentTime); // Silent
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(destination);
+    oscillator.start();
+
+    return destination.stream;
   }
 
   private async createMixedAudioStream(): Promise<void> {

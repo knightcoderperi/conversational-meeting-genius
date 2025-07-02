@@ -84,15 +84,24 @@ export const CompleteMultiSpeakerRecorder: React.FC<CompleteMultiSpeakerRecorder
 
     try {
       console.log('🔧 Starting audio capture setup...');
-      toast.loading('Setting up complete audio capture...');
+      toast.loading('Setting up audio capture... Please allow permissions when prompted.');
       await systemRef.current.setupCompleteAudioCapture();
       setIsSetup(true);
       toast.dismiss();
-      toast.success('✅ Complete audio capture ready! All speakers will be recorded.');
+      toast.success('✅ Audio capture ready! Recording will start now.');
       console.log('✅ Audio capture setup completed successfully');
     } catch (error) {
       toast.dismiss();
-      toast.error(`Failed to setup audio capture: ${error.message}`);
+      
+      // Show user-friendly error messages
+      if (error.message.includes('Permission denied')) {
+        toast.error('❌ Please allow microphone and screen sharing permissions, then click the button again.');
+      } else if (error.message.includes('not support')) {
+        toast.error('❌ Please use Chrome, Firefox, or Edge browser for recording.');
+      } else {
+        toast.error(`❌ Setup failed: ${error.message}`);
+      }
+      
       console.error('❌ Setup error:', error);
       console.error('Error details:', {
         name: error.name,
