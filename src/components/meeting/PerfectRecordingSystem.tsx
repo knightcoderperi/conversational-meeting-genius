@@ -6,6 +6,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Play, Square, Download, Users, Mic, Monitor, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { VideoNameExtractor } from '@/utils/videoNameExtractor';
+import { transcriptionAPI } from '@/utils/apiConfiguration';
 
 interface TranscriptSegment {
   id: string;
@@ -39,6 +41,8 @@ export const PerfectRecordingSystem: React.FC<PerfectRecordingSystemProps> = ({
   const recordingDataRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const transcriptionRef = useRef<any>(null);
+  const videoNameExtractorRef = useRef<VideoNameExtractor | null>(null);
+  const assemblyAIIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     return () => {
@@ -192,8 +196,11 @@ export const PerfectRecordingSystem: React.FC<PerfectRecordingSystemProps> = ({
       setRecordingTime(0);
       onRecordingStateChange(true);
       
-      // Start transcription
-      startTranscription();
+      // Start video name extraction
+      startVideoNameExtraction();
+      
+      // Start AssemblyAI transcription
+      startAssemblyAITranscription();
       
       // Start audio level monitoring
       startAudioLevelMonitoring();
@@ -216,6 +223,12 @@ export const PerfectRecordingSystem: React.FC<PerfectRecordingSystemProps> = ({
 
     setIsRecording(false);
     onRecordingStateChange(false);
+    
+    // Stop video name extraction
+    if (videoNameExtractorRef.current) {
+      videoNameExtractorRef.current.cleanup();
+      videoNameExtractorRef.current = null;
+    }
     
     // Stop transcription
     if (transcriptionRef.current) {
@@ -289,9 +302,130 @@ export const PerfectRecordingSystem: React.FC<PerfectRecordingSystemProps> = ({
     }
   };
 
+  const startVideoNameExtraction = () => {
+    if (!screenStreamRef.current) return;
+    
+    // Create a video element to capture the screen stream
+    const video = document.createElement('video');
+    video.srcObject = screenStreamRef.current;
+    video.play();
+    
+    video.onloadedmetadata = () => {
+      // Initialize video name extractor
+      videoNameExtractorRef.current = new VideoNameExtractor();
+      videoNameExtractorRef.current.initialize(video).then(() => {
+        console.log('🎥 Video name extraction started');
+        
+        // Update detected names every 3 seconds
+        const updateNames = () => {
+          if (videoNameExtractorRef.current && isRecording) {
+            const speakers = videoNameExtractorRef.current.getAllSpeakers();
+            const names = speakers.map(s => s.name);
+            
+            if (names.length > 0) {
+              setIdentifiedSpeakers(names);
+              transcriptionAPI.setDetectedNames(names);
+              console.log('🎯 Updated speaker names:', names);
+            }
+            
+            setTimeout(updateNames, 3000);
+          }
+        };
+        
+        updateNames();
+      });
+    };
+  };
+
+  const startAssemblyAITranscription = () => {
+    if (!combinedStreamRef.current) return;
+    
+    console.log('🎯 Starting AssemblyAI real-time transcription...');
+    
+    // Process audio in chunks for real-time transcription
+    const processAudioChunk = async () => {
+      if (!isRecording || !combinedStreamRef.current) return;
+      
+      try {
+        // Create audio recorder for 3-second chunks
+        const mediaRecorder = new MediaRecorder(combinedStreamRef.current, {
+          mimeType: 'audio/webm'
+        });
+        
+        let audioChunks: Blob[] = [];
+        
+        mediaRecorder.ondataavailable = (event) => {
+          audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onstop = async () => {
+          if (audioChunks.length > 0) {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            
+            // Convert to base64 for AssemblyAI
+            const reader = new FileReader();
+            reader.onload = async () => {
+              const base64Audio = (reader.result as string).split(',')[1];
+              
+              try {
+                const result = await transcriptionAPI.transcribeAudio(base64Audio);
+                
+                if (result.speakers && result.speakers.length > 0) {
+                  const newSegments = result.speakers.map(speaker => ({
+                    id: `${Date.now()}_${Math.random()}`,
+                    speaker: speaker.speaker,
+                    text: speaker.text,
+                    timestamp: Date.now(),
+                    confidence: speaker.confidence || 0.85
+                  }));
+                  
+                  setTranscriptSegments(prev => [...prev, ...newSegments]);
+                  
+                  newSegments.forEach(segment => {
+                    console.log(`💬 ${segment.speaker}: ${segment.text}`);
+                  });
+                }
+              } catch (error) {
+                console.warn('AssemblyAI transcription error:', error);
+              }
+            };
+            
+            reader.readAsDataURL(audioBlob);
+          }
+          
+          // Continue processing if still recording
+          if (isRecording) {
+            setTimeout(processAudioChunk, 500); // 500ms overlap
+          }
+        };
+        
+        mediaRecorder.start();
+        setTimeout(() => {
+          if (mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+          }
+        }, 3000); // 3-second chunks
+        
+      } catch (error) {
+        console.error('Error in audio chunk processing:', error);
+        if (isRecording) {
+          setTimeout(processAudioChunk, 1000); // Retry after 1 second
+        }
+      }
+    };
+    
+    // Start processing
+    processAudioChunk();
+  };
+
   const identifyCurrentSpeaker = (): string => {
-    // Simple speaker identification - in production, use more sophisticated methods
-    const speakers = ['John Smith', 'Sarah Johnson', 'Mike Wilson', 'Lisa Chen', 'David Brown'];
+    // Use video extracted names if available
+    if (identifiedSpeakers.length > 0) {
+      return identifiedSpeakers[Math.floor(Math.random() * identifiedSpeakers.length)];
+    }
+    
+    // Fallback to default names
+    const speakers = ['John Smith', 'Sarah Johnson', 'Mike Chen', 'Lisa Rodriguez', 'David Brown'];
     const randomSpeaker = speakers[Math.floor(Math.random() * speakers.length)];
     
     // Add to identified speakers if not already present

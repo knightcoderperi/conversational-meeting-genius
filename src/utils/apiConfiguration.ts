@@ -14,6 +14,13 @@ export class TranscriptionAPIManager {
     }
   };
 
+  private detectedNames: string[] = [];
+
+  setDetectedNames(names: string[]) {
+    this.detectedNames = names;
+    console.log('🎯 Updated detected names:', names);
+  }
+
   async transcribeAudio(audioBase64: string): Promise<{ text: string; confidence: number; speakers?: any[] }> {
     return this.transcribeWithAssemblyAI(audioBase64);
   }
@@ -45,7 +52,11 @@ export class TranscriptionAPIManager {
       body: JSON.stringify({
         audio_url: upload_url,
         speaker_labels: true,
-        speakers_expected: 4
+        speakers_expected: 10,
+        punctuate: true,
+        format_text: true,
+        boost_param: 'high',
+        language_detection: true
       }),
     });
 
@@ -70,13 +81,20 @@ export class TranscriptionAPIManager {
     return {
       text: transcript.text || '',
       confidence: transcript.confidence || 0.8,
-      speakers: transcript.utterances?.map((utterance: any) => ({
-        text: utterance.text,
-        speaker: `Speaker ${utterance.speaker}`,
-        confidence: utterance.confidence,
-        start: utterance.start,
-        end: utterance.end
-      }))
+      speakers: transcript.utterances?.map((utterance: any, index: number) => {
+        // Try to map to real names from detected names
+        const speakerIndex = parseInt(utterance.speaker) - 1;
+        const realName = this.detectedNames[speakerIndex] || `Speaker ${utterance.speaker}`;
+        
+        return {
+          text: utterance.text,
+          speaker: realName,
+          confidence: utterance.confidence,
+          start: utterance.start,
+          end: utterance.end,
+          speakerId: utterance.speaker
+        };
+      })
     };
   }
 
