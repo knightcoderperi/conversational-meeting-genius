@@ -41,8 +41,8 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
   const [meetingContext, setMeetingContext] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // OpenRouter API key for general questions
-  const openRouterApiKey = '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';
+  // Cypher Alpha API key for general questions
+  const openRouterApiKey = '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';
 
   // Quick action buttons for meeting analysis
   const quickQueries = [
