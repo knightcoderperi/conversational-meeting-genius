@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { PerfectRecordingSystem } from '@/components/meeting/PerfectRecordingSystem';
+import { RealtimeWebRTCTranscription } from '@/components/meeting/RealtimeWebRTCTranscription';
 import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
@@ -158,7 +159,11 @@ export const MeetingPage = () => {
             <Card className="h-[calc(100vh-8rem)]">
               <Tabs defaultValue="chat" className="flex flex-col h-full">
                 <div className="border-b p-4">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
+                    <TabsTrigger value="webrtc" className="flex items-center space-x-2">
+                      <Zap className="w-4 h-4" />
+                      <span>WebRTC</span>
+                    </TabsTrigger>
                     <TabsTrigger value="chat" className="flex items-center space-x-2">
                       <MessageSquare className="w-4 h-4" />
                       <span>AI Chat</span>
@@ -175,6 +180,12 @@ export const MeetingPage = () => {
                 </div>
 
                 <div className="flex-1 overflow-hidden">
+                  <TabsContent value="webrtc" className="h-full m-0">
+                    <div className="p-4 h-full overflow-auto">
+                      <RealtimeWebRTCTranscription />
+                    </div>
+                  </TabsContent>
+
                   <TabsContent value="chat" className="h-full m-0">
                     <div className="p-4 h-full">
                       <LiveAIChatbot 
