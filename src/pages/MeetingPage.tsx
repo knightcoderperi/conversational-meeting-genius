@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { PerfectRecordingSystem } from '@/components/meeting/PerfectRecordingSystem';
 import { RealtimeWebRTCTranscription } from '@/components/meeting/RealtimeWebRTCTranscription';
 import { EnhancedLiveTranscription } from '@/components/meeting/EnhancedLiveTranscription';
+import { CompleteVideoRecorder } from '@/components/meeting/CompleteVideoRecorder';
 import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
@@ -157,14 +158,24 @@ export const MeetingPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Enhanced Live Transcription */}
+          {/* Left Column - Complete Recording System */}
           <div className="space-y-6">
+            <CompleteVideoRecorder
+              meetingId={meeting.id}
+              onTranscriptionUpdate={(text) => {
+                const newSegment = {
+                  id: Date.now().toString(),
+                  speaker: 'Auto-detected',
+                  text: text,
+                  confidence: 0.9,
+                  timestamp: new Date().toLocaleTimeString(),
+                  isFinal: true
+                };
+                setLiveTranscriptionSegments(prev => [...prev, newSegment]);
+              }}
+            />
             <EnhancedLiveTranscription
               onTranscriptionUpdate={setLiveTranscriptionSegments}
-            />
-            <PerfectRecordingSystem
-              meetingId={meeting.id}
-              onRecordingStateChange={handleRecordingStateChange}
             />
           </div>
 
