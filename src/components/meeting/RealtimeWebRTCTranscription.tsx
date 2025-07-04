@@ -92,7 +92,9 @@ export const RealtimeWebRTCTranscription: React.FC = () => {
     analyser.fftSize = 256;
     analyser.smoothingTimeConstant = 0.8;
     
+    // NO AUDIO OUTPUT - Only analysis, prevent echo
     source.connect(analyser);
+    // Do NOT connect to destination to prevent echo
     analysers.current.set(participantId, analyser);
     
     // Monitor audio levels
@@ -161,12 +163,14 @@ export const RealtimeWebRTCTranscription: React.FC = () => {
           speaker: speakerName,
           text: result.text,
           timestamp: new Date(),
-          confidence: result.confidence
+          confidence: result.confidence || 0.85
         };
         
-        setTranscriptions(prev => [...prev, transcription]);
-        
-        console.log(`💬 ${speakerName}: ${result.text}`);
+        setTranscriptions(prev => {
+          const updated = [...prev, transcription];
+          console.log(`💬 LIVE TRANSCRIPTION: ${speakerName}: ${result.text}`);
+          return updated;
+        });
       }
       
     } catch (error) {

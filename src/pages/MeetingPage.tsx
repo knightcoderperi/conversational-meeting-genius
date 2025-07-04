@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { PerfectRecordingSystem } from '@/components/meeting/PerfectRecordingSystem';
 import { RealtimeWebRTCTranscription } from '@/components/meeting/RealtimeWebRTCTranscription';
+import { EnhancedLiveTranscription } from '@/components/meeting/EnhancedLiveTranscription';
 import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,15 @@ interface Meeting {
   start_time: string;
 }
 
+interface TranscriptionSegment {
+  id: string;
+  speaker: string;
+  text: string;
+  confidence: number;
+  timestamp: string;
+  isFinal: boolean;
+}
+
 export const MeetingPage = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -30,6 +40,7 @@ export const MeetingPage = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [loading, setLoading] = useState(true);
   const [meetingStartTime] = useState(Date.now());
+  const [liveTranscriptionSegments, setLiveTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
 
   useEffect(() => {
     if (id && user) {
@@ -146,8 +157,11 @@ export const MeetingPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Complete Multi-Speaker Recording */}
+          {/* Left Column - Enhanced Live Transcription */}
           <div className="space-y-6">
+            <EnhancedLiveTranscription
+              onTranscriptionUpdate={setLiveTranscriptionSegments}
+            />
             <PerfectRecordingSystem
               meetingId={meeting.id}
               onRecordingStateChange={handleRecordingStateChange}
@@ -190,7 +204,7 @@ export const MeetingPage = () => {
                     <div className="p-4 h-full">
                       <LiveAIChatbot 
                         meetingId={meeting.id}
-                        transcriptionHistory={[]}
+                        transcriptionHistory={liveTranscriptionSegments}
                       />
                     </div>
                   </TabsContent>
