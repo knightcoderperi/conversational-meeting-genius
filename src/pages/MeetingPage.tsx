@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { MeetingRecorder } from '@/components/meeting/MeetingRecorder';
-import { RealtimeTranscription } from '@/components/meeting/RealtimeTranscription';
-import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
+import { AdvancedVideoRecorder } from '@/components/meeting/AdvancedVideoRecorder';
+import { ContinuousTranscription } from '@/components/meeting/ContinuousTranscription';
+import { UniversalAIChatbot } from '@/components/meeting/UniversalAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,6 +39,7 @@ export const MeetingPage = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
+  const [detectedSpeakers, setDetectedSpeakers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [meetingStartTime] = useState(Date.now());
 
@@ -162,17 +163,19 @@ export const MeetingPage = () => {
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Left Column - Recording & Transcription */}
           <div className="space-y-6">
-            <MeetingRecorder
+            <AdvancedVideoRecorder
               onStartRecording={handleStartRecording}
               onStopRecording={handleStopRecording}
+              onSpeakerDetected={(speaker) => setDetectedSpeakers(prev => [...prev, speaker])}
               meetingId={meeting.id}
               isRecording={isRecording}
             />
             
-            <RealtimeTranscription
+            <ContinuousTranscription
               meetingId={meeting.id}
               isRecording={isRecording}
               mediaStream={mediaStream}
+              detectedSpeakers={detectedSpeakers}
               onTranscriptionUpdate={handleTranscriptionUpdate}
             />
           </div>
@@ -201,7 +204,7 @@ export const MeetingPage = () => {
                 <div className="flex-1 overflow-hidden">
                   <TabsContent value="chat" className="h-full m-0">
                     <div className="p-4 h-full">
-                      <LiveAIChatbot 
+                      <UniversalAIChatbot 
                         meetingId={meeting.id}
                         transcriptionHistory={transcriptionSegments}
                       />
