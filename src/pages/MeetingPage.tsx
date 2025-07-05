@@ -3,16 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { PerfectRecordingSystem } from '@/components/meeting/PerfectRecordingSystem';
-import { RealtimeWebRTCTranscription } from '@/components/meeting/RealtimeWebRTCTranscription';
-import { EnhancedLiveTranscription } from '@/components/meeting/EnhancedLiveTranscription';
-import { CompleteVideoRecorder } from '@/components/meeting/CompleteVideoRecorder';
+import { MeetingRecorder } from '@/components/meeting/MeetingRecorder';
+import { RealtimeTranscription } from '@/components/meeting/RealtimeTranscription';
 import { LiveAIChatbot } from '@/components/meeting/LiveAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Users, BarChart3, MessageSquare, Zap } from 'lucide-react';
+import { ArrowLeft, Users, BarChart3, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 
@@ -39,9 +37,10 @@ export const MeetingPage = () => {
   const navigate = useNavigate();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+  const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
   const [loading, setLoading] = useState(true);
   const [meetingStartTime] = useState(Date.now());
-  const [liveTranscriptionSegments, setLiveTranscriptionSegments] = useState<TranscriptionSegment[]>([]);
 
   useEffect(() => {
     if (id && user) {
@@ -73,28 +72,39 @@ export const MeetingPage = () => {
     }
   };
 
-  const handleRecordingStateChange = async (recording: boolean) => {
-    setIsRecording(recording);
+  const handleStartRecording = (stream: MediaStream) => {
+    setMediaStream(stream);
+    setIsRecording(true);
+    console.log('Recording started with stream:', stream);
+  };
 
+  const handleStopRecording = async () => {
+    setIsRecording(false);
+    setMediaStream(null);
+    console.log('Recording stopped');
+
+    // Update meeting status
     if (meeting) {
-      if (!recording) {
-        // Update meeting when recording stops
-        const { error } = await supabase
-          .from('meetings')
-          .update({
-            status: 'completed',
-            end_time: new Date().toISOString(),
-            duration: Math.floor((Date.now() - new Date(meeting.start_time).getTime()) / 1000)
-          })
-          .eq('id', meeting.id);
+      const { error } = await supabase
+        .from('meetings')
+        .update({
+          status: 'completed',
+          end_time: new Date().toISOString(),
+          duration: Math.floor((Date.now() - new Date(meeting.start_time).getTime()) / 1000)
+        })
+        .eq('id', meeting.id);
 
-        if (error) {
-          console.error('Error updating meeting:', error);
-        } else {
-          toast.success('Meeting completed and saved!');
-        }
+      if (error) {
+        console.error('Error updating meeting:', error);
+      } else {
+        toast.success('Meeting completed and saved!');
       }
     }
+  };
+
+  const handleTranscriptionUpdate = (segments: TranscriptionSegment[]) => {
+    setTranscriptionSegments(segments);
+    console.log('Transcription updated:', segments.length, 'segments');
   };
 
   if (loading) {
@@ -136,19 +146,11 @@ export const MeetingPage = () => {
               </Link>
               <div className="border-l border-gray-300 dark:border-gray-600 h-6"></div>
               <div>
-                <div className="flex items-center space-x-2">
-                  <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {meeting.title}
-                  </h1>
-                  {isRecording && (
-                    <div className="flex items-center space-x-1">
-                      <Zap className="w-4 h-4 text-green-600 animate-pulse" />
-                      <span className="text-xs font-medium text-green-600">COMPLETE RECORDING</span>
-                    </div>
-                  )}
-                </div>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {meeting.title}
+                </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-300 capitalize">
-                  {meeting.platform} Meeting • Multi-Speaker Capture
+                  {meeting.platform} Meeting
                 </p>
               </div>
             </div>
@@ -158,24 +160,20 @@ export const MeetingPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Complete Recording System */}
+          {/* Left Column - Recording & Transcription */}
           <div className="space-y-6">
-            <CompleteVideoRecorder
+            <MeetingRecorder
+              onStartRecording={handleStartRecording}
+              onStopRecording={handleStopRecording}
               meetingId={meeting.id}
-              onTranscriptionUpdate={(text) => {
-                const newSegment = {
-                  id: Date.now().toString(),
-                  speaker: 'Auto-detected',
-                  text: text,
-                  confidence: 0.9,
-                  timestamp: new Date().toLocaleTimeString(),
-                  isFinal: true
-                };
-                setLiveTranscriptionSegments(prev => [...prev, newSegment]);
-              }}
+              isRecording={isRecording}
             />
-            <EnhancedLiveTranscription
-              onTranscriptionUpdate={setLiveTranscriptionSegments}
+            
+            <RealtimeTranscription
+              meetingId={meeting.id}
+              isRecording={isRecording}
+              mediaStream={mediaStream}
+              onTranscriptionUpdate={handleTranscriptionUpdate}
             />
           </div>
 
@@ -184,11 +182,7 @@ export const MeetingPage = () => {
             <Card className="h-[calc(100vh-8rem)]">
               <Tabs defaultValue="chat" className="flex flex-col h-full">
                 <div className="border-b p-4">
-                  <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="webrtc" className="flex items-center space-x-2">
-                      <Zap className="w-4 h-4" />
-                      <span>WebRTC</span>
-                    </TabsTrigger>
+                  <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="chat" className="flex items-center space-x-2">
                       <MessageSquare className="w-4 h-4" />
                       <span>AI Chat</span>
@@ -205,17 +199,11 @@ export const MeetingPage = () => {
                 </div>
 
                 <div className="flex-1 overflow-hidden">
-                  <TabsContent value="webrtc" className="h-full m-0">
-                    <div className="p-4 h-full overflow-auto">
-                      <RealtimeWebRTCTranscription />
-                    </div>
-                  </TabsContent>
-
                   <TabsContent value="chat" className="h-full m-0">
                     <div className="p-4 h-full">
                       <LiveAIChatbot 
                         meetingId={meeting.id}
-                        transcriptionHistory={liveTranscriptionSegments}
+                        transcriptionHistory={transcriptionSegments}
                       />
                     </div>
                   </TabsContent>
@@ -224,7 +212,7 @@ export const MeetingPage = () => {
                     <div className="p-4 h-full">
                       <LiveMeetingAnalytics 
                         meetingId={meeting.id}
-                        transcriptionSegments={[]}
+                        transcriptionSegments={transcriptionSegments}
                         isRecording={isRecording}
                         startTime={meetingStartTime}
                       />
@@ -235,52 +223,39 @@ export const MeetingPage = () => {
                     <CardContent className="p-4 h-full">
                       <div className="space-y-4">
                         <h3 className="font-semibold text-gray-900 dark:text-white">
-                          Complete Multi-Speaker System
+                          Identified Speakers
                         </h3>
-                        
-                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                          <div className="flex items-center space-x-2 text-sm font-medium text-blue-700 dark:text-blue-300 mb-3">
-                            <Zap className="w-4 h-4" />
-                            <span>Advanced Features Active</span>
-                          </div>
-                          <div className="space-y-2 text-xs text-blue-600 dark:text-blue-400">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <span>Complete audio capture from ALL participants</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <span>Real-time speaker identification</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <span>Unlimited recording duration</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <span>High-quality audio processing</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <span>Exportable transcripts with timestamps</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {!isRecording ? (
-                          <div className="text-center py-8">
-                            <Zap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-sm text-gray-600 dark:text-gray-300">
-                              Start the complete recording to see identified speakers with real names and audio levels
-                            </p>
+                        {transcriptionSegments.length > 0 ? (
+                          <div className="space-y-3">
+                            {Array.from(new Set(transcriptionSegments.filter(s => s.isFinal).map(s => s.speaker))).map((speaker) => {
+                              const speakerSegments = transcriptionSegments.filter(s => s.speaker === speaker && s.isFinal);
+                              const totalWords = speakerSegments.reduce((sum, s) => sum + s.text.split(' ').length, 0);
+                              const avgConfidence = Math.round(speakerSegments.reduce((sum, s) => sum + s.confidence, 0) / speakerSegments.length * 100);
+                              
+                              return (
+                                <div key={speaker} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                                    <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900 dark:text-white">{speaker}</p>
+                                    <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-300">
+                                      <span>{speakerSegments.length} segments</span>
+                                      <span>{totalWords} words</span>
+                                      <span>{avgConfidence}% accuracy</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
                           <div className="text-center py-8">
-                            <div className="animate-pulse">
-                              <Users className="w-12 h-12 text-blue-500 mx-auto mb-4" />
-                            </div>
+                            <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                             <p className="text-sm text-gray-600 dark:text-gray-300">
-                              Analyzing audio and identifying speakers in real-time...
+                              {isRecording 
+                                ? 'Speakers will appear here as they talk' 
+                                : 'Start recording to identify speakers'}
                             </p>
                           </div>
                         )}

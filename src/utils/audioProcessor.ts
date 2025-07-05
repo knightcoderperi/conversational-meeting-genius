@@ -1,4 +1,3 @@
-
 export class AudioProcessor {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -66,102 +65,45 @@ export class AudioProcessor {
       this.audioContext = null;
     }
   }
-
-  // Convert audio data to base64 for API transmission
-  encodeAudioData(float32Array: Float32Array): string {
-    // Convert to 16-bit PCM
-    const int16Array = new Int16Array(float32Array.length);
-    for (let i = 0; i < float32Array.length; i++) {
-      const s = Math.max(-1, Math.min(1, float32Array[i]));
-      int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    
-    // Convert to base64
-    const uint8Array = new Uint8Array(int16Array.buffer);
-    let binary = '';
-    const chunkSize = 0x8000;
-    
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-      binary += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-    
-    return btoa(binary);
-  }
 }
 
-// Speaker identification utility
+// Improved Speaker identification utility
 export class SpeakerIdentifier {
-  private speakers: Map<string, { name: string; features: number[] }> = new Map();
-  private currentSpeaker = 'Speaker 1';
-  private speakerCount = 1;
-
+  private currentSpeaker = 'Main Speaker';
+  private lastSpeechTime = 0;
+  private silenceThreshold = 2000; // 2 seconds of silence before considering new speaker
+  
   identifySpeaker(audioFeatures: Float32Array): string {
-    // Simple speaker identification based on voice characteristics
-    const features = this.extractVoiceFeatures(audioFeatures);
+    const currentTime = Date.now();
+    const hasAudio = this.detectSpeech(audioFeatures);
     
-    // Find closest matching speaker or create new one
-    let closestSpeaker = null;
-    let minDistance = Infinity;
-    
-    for (const [speakerId, speaker] of this.speakers) {
-      const distance = this.calculateDistance(features, speaker.features);
-      if (distance < minDistance && distance < 0.3) { // Threshold for same speaker
-        minDistance = distance;
-        closestSpeaker = speakerId;
-      }
+    if (hasAudio) {
+      this.lastSpeechTime = currentTime;
+      return this.currentSpeaker;
     }
     
-    if (closestSpeaker) {
-      this.currentSpeaker = this.speakers.get(closestSpeaker)!.name;
-    } else {
-      // New speaker detected
-      this.speakerCount++;
-      const newSpeakerId = `speaker_${this.speakerCount}`;
-      const newSpeakerName = `Speaker ${this.speakerCount}`;
-      
-      this.speakers.set(newSpeakerId, {
-        name: newSpeakerName,
-        features
-      });
-      
-      this.currentSpeaker = newSpeakerName;
+    // If there's been silence for too long, it might be a new speaker next time
+    if (currentTime - this.lastSpeechTime > this.silenceThreshold) {
+      // Reset for potential new speaker detection
+      // But for now, we'll keep it as the same speaker since it's likely the same person
+      return this.currentSpeaker;
     }
     
     return this.currentSpeaker;
   }
 
-  private extractVoiceFeatures(audioData: Float32Array): number[] {
-    // Extract basic voice features (pitch, energy, etc.)
-    const features = [];
-    
-    // Energy
-    const energy = audioData.reduce((sum, sample) => sum + sample * sample, 0) / audioData.length;
-    features.push(energy);
-    
-    // Zero crossing rate (rough pitch indicator)
-    let zeroCrossings = 0;
-    for (let i = 1; i < audioData.length; i++) {
-      if ((audioData[i] >= 0) !== (audioData[i - 1] >= 0)) {
-        zeroCrossings++;
-      }
-    }
-    features.push(zeroCrossings / audioData.length);
-    
-    return features;
+  private detectSpeech(audioData: Float32Array): boolean {
+    // Calculate RMS (Root Mean Square) to detect speech
+    const rms = Math.sqrt(audioData.reduce((sum, sample) => sum + sample * sample, 0) / audioData.length);
+    return rms > 0.01; // Threshold for speech detection
   }
 
-  private calculateDistance(features1: number[], features2: number[]): number {
-    if (features1.length !== features2.length) return Infinity;
-    
-    let sum = 0;
-    for (let i = 0; i < features1.length; i++) {
-      sum += Math.pow(features1[i] - features2[i], 2);
-    }
-    return Math.sqrt(sum);
+  getCurrentSpeaker(): string {
+    return this.currentSpeaker;
   }
 
-  getAllSpeakers(): string[] {
-    return Array.from(this.speakers.values()).map(speaker => speaker.name);
+  // Method to manually set speaker name if needed
+  setSpeakerName(name: string): void {
+    this.currentSpeaker = name;
   }
 }

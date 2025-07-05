@@ -9,7 +9,8 @@ import { AuthPage } from "@/pages/AuthPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { NewMeetingPage } from "@/pages/NewMeetingPage";
 import { MeetingPage } from "@/pages/MeetingPage";
-import { UpgradePage } from "@/pages/UpgradePage";
+import { EnhancedMeetingPage } from "@/pages/EnhancedMeetingPage";
+import { MeetingAnalyticsPage } from "@/pages/MeetingAnalyticsPage";
 import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
@@ -43,15 +44,23 @@ const App = () => (
               path="/meeting/:id" 
               element={
                 <ProtectedRoute>
-                  <MeetingPage />
+                  <EnhancedMeetingPage />
                 </ProtectedRoute>
               } 
             />
             <Route 
-              path="/upgrade" 
+              path="/meeting/:id/analytics" 
               element={
                 <ProtectedRoute>
-                  <UpgradePage />
+                  <MeetingAnalyticsPage />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/meeting/:id/classic" 
+              element={
+                <ProtectedRoute>
+                  <MeetingPage />
                 </ProtectedRoute>
               } 
             />
