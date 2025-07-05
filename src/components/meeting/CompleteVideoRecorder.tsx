@@ -210,13 +210,27 @@ export const CompleteVideoRecorder: React.FC<CompleteVideoRecorderProps> = ({
         body: formData
       });
 
-      if (response.data?.text) {
+      if (response.data?.speakers && response.data.speakers.length > 0) {
+        // Process multi-speaker transcription
+        const newTranscriptions = response.data.speakers.map((speaker: any) => 
+          `${speaker.speaker}: ${speaker.text}`
+        ).join('\n');
+        
+        setTranscriptionText(prev => {
+          const updated = prev + '\n' + newTranscriptions;
+          return updated.slice(-2000); // Keep last 2000 chars to prevent memory issues
+        });
+        
+        onTranscriptionUpdate(newTranscriptions);
+      } else if (response.data?.text) {
+        // Fallback to simple transcription
         const newText = response.data.text;
         setTranscriptionText(prev => prev + ' ' + newText);
         onTranscriptionUpdate(newText);
       }
     } catch (error) {
       console.error('Transcription failed:', error);
+      toast.error('Transcription failed - check API keys');
     }
   };
 

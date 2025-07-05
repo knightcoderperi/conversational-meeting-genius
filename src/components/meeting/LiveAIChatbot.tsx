@@ -41,27 +41,26 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
   const [meetingContext, setMeetingContext] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Cypher Alpha API key for general questions
-  const openRouterApiKey = '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';
-
+  // Remove hardcoded API key - now using edge functions with configured secrets
+  
   // Quick action buttons for meeting analysis
   const quickQueries = [
-    "📝 Summarize key points",
-    "✅ List action items",
-    "👥 Who spoke most?",
-    "💡 Key decisions made",
-    "🔍 Important topics",
-    "⏱️ Meeting timeline",
-    "📊 Speaker analysis",
-    "🎯 Next steps"
+    "📝 Summarize key points from all speakers",
+    "✅ List action items and who mentioned them",
+    "👥 Who spoke most and what were their main points?",
+    "💡 Key decisions made by each participant",
+    "🔍 Important topics discussed by different speakers",
+    "⏱️ Meeting timeline with speaker contributions",
+    "📊 Speaker analysis and participation levels",
+    "🎯 Next steps assigned to specific people"
   ];
 
   useEffect(() => {
-    // Update context whenever new transcription comes in
+    // Update context whenever new transcription comes in with speaker names
     if (transcriptionHistory.length > 0) {
       const recentTranscripts = transcriptionHistory
         .filter(segment => segment.isFinal)
-        .slice(-50) // Last 50 segments for context
+        .slice(-100) // Increased to 100 segments for better context
         .map(segment => `[${segment.timestamp}] ${segment.speaker}: ${segment.text}`)
         .join('\n');
       setMeetingContext(recentTranscripts);
@@ -78,72 +77,35 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
 
   const isGeneralQuestion = (message: string): boolean => {
     const meetingKeywords = [
-      'meeting', 'discuss', 'speaker', 'said', 'talked', 'mentioned', 'action', 'decision',
-      'summary', 'timeline', 'participant', 'topic', 'agenda', 'note', 'transcript'
+      'meeting', 'discuss', 'speaker', 'spoke', 'said', 'talked', 'mentioned', 'action', 'decision',
+      'summary', 'timeline', 'participant', 'topic', 'agenda', 'note', 'transcript', 'conversation',
+      'call', 'session', 'presentation', 'colleague', 'team member', 'minutes', 'recording'
     ];
     
     const lowerMessage = message.toLowerCase();
-    return !meetingKeywords.some(keyword => lowerMessage.includes(keyword));
-  };
-
-  const callOpenRouterAPI = async (message: string): Promise<string> => {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openRouterApiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://lovable.dev',
-          'X-Title': 'Meeting AI Assistant'
-        },
-        body: JSON.stringify({
-          model: 'meta-llama/llama-3.1-8b-instruct:free',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a helpful AI assistant. Answer the user\'s question using your general knowledge. Be helpful, accurate, and conversational.'
-            },
-            {
-              role: 'user',
-              content: message
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 1000,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`OpenRouter API call failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.choices[0].message.content;
-    } catch (error) {
-      console.error('Error calling OpenRouter API:', error);
-      throw error;
+    // Check if the message contains meeting-related keywords or if we have context
+    const hasMeetingKeywords = meetingKeywords.some(keyword => lowerMessage.includes(keyword));
+    const hasTranscriptionContext = meetingContext.trim().length > 50;
+    
+    // If there's substantial meeting context, prefer meeting-focused AI unless clearly general
+    if (hasTranscriptionContext && !isObviouslyGeneral(lowerMessage)) {
+      return false; // Use meeting AI
     }
+    
+    return !hasMeetingKeywords;
   };
 
-  const callGroqAPI = async (message: string, context: string): Promise<string> => {
-    try {
-      const response = await supabase.functions.invoke('ai-chat', {
-        body: {
-          message,
-          context
-        }
-      });
-
-      if (response.error) {
-        throw new Error(`Groq API call failed: ${response.error.message}`);
-      }
-
-      return response.data.response;
-    } catch (error) {
-      console.error('Error calling Groq API:', error);
-      throw error;
-    }
+  const isObviouslyGeneral = (message: string): boolean => {
+    const generalIndicators = [
+      'weather', 'news', 'recipe', 'joke', 'story', 'definition', 'explain', 'how to',
+      'what is', 'when did', 'where is', 'history of', 'tell me about', 'calculate',
+      'translate', 'programming', 'code', 'algorithm', 'math', 'science'
+    ];
+    
+    return generalIndicators.some(indicator => message.includes(indicator));
   };
+
+  // Remove unused functions - now using edge function for all AI calls
 
   const sendMessageToAI = async (message: string) => {
     setIsProcessing(true);
@@ -162,17 +124,23 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
       let aiResponse: string;
       let isGeneral = false;
 
-      // Check if it's a general question or meeting-related
-      if (isGeneralQuestion(message) || !meetingContext.trim()) {
-        // Use OpenRouter API for general questions
-        aiResponse = await callOpenRouterAPI(message);
-        isGeneral = true;
-        console.log('Using OpenRouter API for general question');
-      } else {
-        // Use Groq API for meeting-related questions
-        aiResponse = await callGroqAPI(message, meetingContext);
-        console.log('Using Groq API for meeting question');
+      // Always use the edge function which will intelligently route between APIs
+      const contextToSend = isGeneralQuestion(message) ? '' : meetingContext;
+      isGeneral = contextToSend === '';
+
+      const response = await supabase.functions.invoke('ai-chat', {
+        body: {
+          message,
+          context: contextToSend
+        }
+      });
+
+      if (response.error) {
+        throw new Error(`AI API call failed: ${response.error.message}`);
       }
+
+      aiResponse = response.data.response;
+      console.log(`Used ${isGeneral ? 'general' : 'meeting'} AI for question`);
       
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -191,12 +159,12 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
       
     } catch (error) {
       console.error('Error getting AI response:', error);
-      toast.error('Failed to get AI response');
+      toast.error('Failed to get AI response - check API configuration');
       
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: 'Sorry, I encountered an error processing your request. Please try again.',
+        content: 'Sorry, I encountered an error processing your request. Please check that the API keys are properly configured.',
         timestamp: new Date()
       };
       
@@ -287,8 +255,9 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 </p>
                 <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
                   <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                    <div>🎯 <strong>Meeting Questions:</strong> Uses Groq AI with your meeting context</div>
-                    <div>🌍 <strong>General Questions:</strong> Uses OpenRouter AI for any topic</div>
+                    <div>🎯 <strong>Meeting Questions:</strong> Uses Groq AI with multi-speaker context</div>
+                    <div>🌍 <strong>General Questions:</strong> Uses Cyber Alpha AI for any topic</div>
+                    <div>👥 <strong>Speaker Analysis:</strong> Identifies and analyzes individual contributions</div>
                   </div>
                 </div>
               </div>
@@ -368,7 +337,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             </Button>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            💡 Meeting questions use Groq AI • General questions use OpenRouter AI
+            💡 Meeting questions use Groq AI with speaker context • General questions use Cyber Alpha AI
           </p>
         </div>
       </CardContent>
