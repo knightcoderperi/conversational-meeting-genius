@@ -72,7 +72,7 @@ serve(async (req) => {
     // Poll for completion (for real-time, we might implement streaming later)
     let result = transcriptionJob;
     let attempts = 0;
-    const maxAttempts = realtime ? 30 : 60; // Shorter timeout for real-time
+    const maxAttempts = realtime ? 60 : 120; // Longer timeout for unlimited transcription
 
     while (result.status !== 'completed' && result.status !== 'error' && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, realtime ? 1000 : 2000));

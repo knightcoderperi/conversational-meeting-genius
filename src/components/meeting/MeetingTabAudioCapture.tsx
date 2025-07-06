@@ -29,11 +29,15 @@ export const MeetingTabAudioCapture: React.FC<MeetingTabAudioCaptureProps> = ({
   const [segments, setSegments] = useState<TranscriptionSegment[]>([]);
   const [currentText, setCurrentText] = useState('');
   const [activeSpeakers, setActiveSpeakers] = useState<string[]>([]);
+  const [identifiedSpeakers, setIdentifiedSpeakers] = useState<Map<string, string>>(new Map());
   
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const transcriptionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const speakerIdentificationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     return () => {
@@ -43,11 +47,15 @@ export const MeetingTabAudioCapture: React.FC<MeetingTabAudioCaptureProps> = ({
 
   const startTabAudioCapture = async () => {
     try {
-      console.log('Starting tab audio capture for all meeting participants...');
+      console.log('Starting comprehensive meeting capture (audio + video for speaker identification)...');
       
-      // Request display media with system audio - this captures ALL meeting participants
+      // Request display media with BOTH audio and video for complete meeting capture
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: false, // We only need audio
+        video: {
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
+        },
         audio: {
           echoCancellation: false, // Keep original meeting audio
           noiseSuppression: false, // Don't filter out other speakers
@@ -66,6 +74,21 @@ export const MeetingTabAudioCapture: React.FC<MeetingTabAudioCaptureProps> = ({
       console.log(`Captured ${audioTracks.length} audio tracks from meeting tab`);
       
       mediaStreamRef.current = stream;
+      
+      // Set up video element for speaker identification
+      const videoTracks = stream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        if (!videoRef.current) {
+          videoRef.current = document.createElement('video');
+          videoRef.current.style.display = 'none';
+          document.body.appendChild(videoRef.current);
+        }
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+        
+        // Start speaker identification from video frames
+        startSpeakerIdentification();
+      }
       
       // Set up MediaRecorder for chunked processing
       const mediaRecorder = new MediaRecorder(stream, {
@@ -107,7 +130,22 @@ export const MeetingTabAudioCapture: React.FC<MeetingTabAudioCaptureProps> = ({
 
     } catch (error) {
       console.error('Failed to start tab audio capture:', error);
-      toast.error('Failed to capture meeting audio. Make sure to select "Share tab" and enable "Share tab audio"');
+      
+      // Provide specific guidance based on error type
+      if (error.name === 'NotAllowedError') {
+        toast.error('Permission denied. Please allow screen sharing and make sure to check "Share tab audio"');
+      } else if (error.name === 'NotFoundError') {
+        toast.error('No tab selected. Please select a tab and enable "Share tab audio"');
+      } else {
+        toast.error(`Failed to capture meeting audio: ${error.message}`);
+      }
+      
+      // Show detailed instructions
+      setTimeout(() => {
+        toast.info('Instructions: 1) Click "Capture Meeting Audio" 2) Select "Chrome Tab" 3) Choose your meeting tab 4) ✅ Check "Share tab audio" 5) Click Share', {
+          duration: 8000
+        });
+      }, 1000);
     }
   };
 
@@ -133,15 +171,20 @@ export const MeetingTabAudioCapture: React.FC<MeetingTabAudioCaptureProps> = ({
       }
 
       if (data && data.segments) {
-        // Update segments with new transcriptions
-        const newSegments = data.segments.map((segment: any) => ({
-          id: `${Date.now()}_${Math.random()}`,
-          speaker: segment.speaker || 'Unknown Speaker',
-          text: segment.text,
-          confidence: segment.confidence || 0.9,
-          timestamp: new Date().toLocaleTimeString(),
-          isFinal: segment.is_final || false
-        }));
+        // Update segments with new transcriptions and map to identified speakers
+        const newSegments = data.segments.map((segment: any) => {
+          const speakerId = segment.speaker || 'Unknown Speaker';
+          const identifiedName = identifiedSpeakers.get(speakerId) || speakerId;
+          
+          return {
+            id: `${Date.now()}_${Math.random()}`,
+            speaker: identifiedName,
+            text: segment.text,
+            confidence: segment.confidence || 0.9,
+            timestamp: new Date().toLocaleTimeString(),
+            isFinal: segment.is_final || false
+          };
+        });
 
         setSegments(prev => {
           const updated = [...prev, ...newSegments];
@@ -169,6 +212,68 @@ export const MeetingTabAudioCapture: React.FC<MeetingTabAudioCaptureProps> = ({
     }
   };
 
+  const startSpeakerIdentification = () => {
+    if (!videoRef.current || !canvasRef.current) {
+      // Create canvas for frame capture
+      canvasRef.current = document.createElement('canvas');
+      canvasRef.current.style.display = 'none';
+      document.body.appendChild(canvasRef.current);
+    }
+
+    // Capture video frames every 5 seconds to identify speakers
+    speakerIdentificationIntervalRef.current = setInterval(async () => {
+      if (videoRef.current && canvasRef.current && isCapturing) {
+        try {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx || video.videoWidth === 0 || video.videoHeight === 0) return;
+
+          // Set canvas size to match video
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          
+          // Draw current video frame to canvas
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Convert canvas to blob for speaker identification
+          canvas.toBlob(async (blob) => {
+            if (blob) {
+              const arrayBuffer = await blob.arrayBuffer();
+              const imageData = Array.from(new Uint8Array(arrayBuffer));
+              
+              // Send to speaker identification service
+              const { data, error } = await supabase.functions.invoke('identify-speaker', {
+                body: {
+                  imageBlob: imageData,
+                  meetingId: meetingId
+                }
+              });
+
+              if (!error && data && data.speaker) {
+                const speaker = data.speaker;
+                console.log('Speaker identified:', speaker);
+                
+                // Update speaker mapping
+                setIdentifiedSpeakers(prev => {
+                  const updated = new Map(prev);
+                  updated.set(speaker.id, speaker.name);
+                  return updated;
+                });
+                
+                toast.success(`Speaker identified: ${speaker.name}`);
+              }
+            }
+          }, 'image/jpeg', 0.8);
+          
+        } catch (error) {
+          console.error('Error in speaker identification:', error);
+        }
+      }
+    }, 5000); // Check every 5 seconds
+  };
+
   const stopCapture = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -182,6 +287,22 @@ export const MeetingTabAudioCapture: React.FC<MeetingTabAudioCaptureProps> = ({
     if (transcriptionIntervalRef.current) {
       clearInterval(transcriptionIntervalRef.current);
       transcriptionIntervalRef.current = null;
+    }
+
+    if (speakerIdentificationIntervalRef.current) {
+      clearInterval(speakerIdentificationIntervalRef.current);
+      speakerIdentificationIntervalRef.current = null;
+    }
+
+    // Clean up video and canvas elements
+    if (videoRef.current) {
+      document.body.removeChild(videoRef.current);
+      videoRef.current = null;
+    }
+    
+    if (canvasRef.current) {
+      document.body.removeChild(canvasRef.current);
+      canvasRef.current = null;
     }
 
     setIsCapturing(false);
