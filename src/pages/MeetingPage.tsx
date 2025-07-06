@@ -3,8 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { AdvancedVideoRecorder } from '@/components/meeting/AdvancedVideoRecorder';
-import { ContinuousTranscription } from '@/components/meeting/ContinuousTranscription';
+import { MeetingTabAudioCapture } from '@/components/meeting/MeetingTabAudioCapture';
 import { UniversalAIChatbot } from '@/components/meeting/UniversalAIChatbot';
 import { LiveMeetingAnalytics } from '@/components/meeting/LiveMeetingAnalytics';
 import { Button } from '@/components/ui/button';
@@ -161,21 +160,10 @@ export const MeetingPage = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Recording & Transcription */}
+          {/* Left Column - Multi-Speaker Audio Capture */}
           <div className="space-y-6">
-            <AdvancedVideoRecorder
-              onStartRecording={handleStartRecording}
-              onStopRecording={handleStopRecording}
-              onSpeakerDetected={(speaker) => setDetectedSpeakers(prev => [...prev, speaker])}
+            <MeetingTabAudioCapture
               meetingId={meeting.id}
-              isRecording={isRecording}
-            />
-            
-            <ContinuousTranscription
-              meetingId={meeting.id}
-              isRecording={isRecording}
-              mediaStream={mediaStream}
-              detectedSpeakers={detectedSpeakers}
               onTranscriptionUpdate={handleTranscriptionUpdate}
             />
           </div>
