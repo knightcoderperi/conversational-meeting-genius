@@ -13,9 +13,9 @@ A powerful Chrome Extension that captures **all participants' audio and video** 
 
 ## 📦 Installation
 
-1. **Update Configuration**:
-   - Open `background.js`
-   - Update `SUPABASE_URL` and `SUPABASE_ANON_KEY` with your actual values
+1. **Extension is Pre-Configured**:
+   - The `background.js` already has the correct Supabase configuration
+   - No manual configuration needed
 
 2. **Load the Extension**:
    - Open Chrome and navigate to `chrome://extensions/`

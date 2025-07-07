@@ -4,9 +4,9 @@ let mediaRecorder = null;
 let isCapturing = false;
 let websocketConnection = null;
 
-// API Configuration - Update with your Supabase URL
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key';
+// API Configuration - Your Supabase Project
+const SUPABASE_URL = 'https://iofshnicmux7ciymldk.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvZnNobmljbXV4N2NpeW1sZGsiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTc1MTAxMTY2MiwiZXhwIjoyMDY2NTg3NjYyfQ.FRW2owD1YTrEeXQNrH3f-7lJ-Nb0SbhkmyaAajDYn1o';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Background received message:', message);
