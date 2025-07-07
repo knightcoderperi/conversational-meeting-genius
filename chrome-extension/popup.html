@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 350px;
+      min-height: 400px;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .header {
+      padding: 20px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+    }
+    
+    .logo {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    
+    .subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    
+    .content {
+      padding: 20px;
+    }
+    
+    .status-card {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    
+    .status-dot.active {
+      background: #10b981;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+    
+    .status-dot.inactive {
+      background: #6b7280;
+    }
+    
+    .btn {
+      width: 100%;
+      padding: 14px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 8px;
+    }
+    
+    .btn-primary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .btn-primary:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+    
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.8);
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.9);
+      transform: translateY(-1px);
+    }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+    
+    .transcription-preview {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 16px;
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    
+    .speaker-tag {
+      background: rgba(59, 130, 246, 0.8);
+      color: white;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    
+    .settings-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .settings-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    
+    .toggle {
+      width: 44px;
+      height: 24px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .toggle.active {
+      background: rgba(16, 185, 129, 0.8);
+    }
+    
+    .toggle-slider {
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s;
+    }
+    
+    .toggle.active .toggle-slider {
+      transform: translateX(20px);
+    }
+    
+    .footer {
+      padding: 16px 20px;
+      text-align: center;
+      font-size: 11px;
+      opacity: 0.7;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .error-message {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fecaca;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    
+    .success-message {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.5);
+      color: #a7f3d0;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .pulsing {
+      animation: pulse 2s infinite;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🎤 Omnimeet</div>
+    <div class="subtitle">AI Meeting Assistant</div>
+  </div>
+  
+  <div class="content">
+    <!-- Status Card -->
+    <div class="status-card">
+      <div class="status-indicator">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Ready to capture</span>
+      </div>
+      <div id="captureInfo" style="font-size: 12px; opacity: 0.8;"></div>
+    </div>
+    
+    <!-- Error/Success Messages -->
+    <div id="messageContainer"></div>
+    
+    <!-- Control Buttons -->
+    <div id="controlButtons">
+      <button class="btn btn-primary" id="startBtn">
+        🎯 Start Capturing Meeting
+      </button>
+      <button class="btn btn-danger" id="stopBtn" style="display: none;">
+        ⏹️ Stop Capture
+      </button>
+    </div>
+    
+    <!-- Live Transcription Preview -->
+    <div id="transcriptionContainer" style="display: none;">
+      <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">
+        📝 Live Transcription
+      </div>
+      <div class="transcription-preview" id="transcriptionPreview">
+        <div style="color: #888; text-align: center; padding: 20px;">
+          Waiting for speech...
+        </div>
+      </div>
+    </div>
+    
+    <!-- Settings -->
+    <div class="settings-section">
+      <div class="settings-item">
+        <span>Auto-scroll transcription</span>
+        <div class="toggle active" id="autoScrollToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+      <div class="settings-item">
+        <span>Speaker identification</span>
+        <div class="toggle active" id="speakerIdToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="footer">
+    Made with ❤️ for better meetings
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
