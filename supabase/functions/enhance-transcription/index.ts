@@ -8,189 +8,175 @@ const corsHeaders = {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { audio, meetingId, enableSpeakerDiarization, realtime } = await req.json();
-    
-    if (!audio) {
-      throw new Error('No audio data provided');
-    }
+    const { segment, audioData, meetingId, contextSegments } = await req.json();
 
-    const assemblyApiKey = Deno.env.get('ASSEMBLY_AI');
-    if (!assemblyApiKey) {
-      throw new Error('AssemblyAI API key not configured');
-    }
+    const huggingFaceApiKey = Deno.env.get('HUGGINGFACE_API_KEY');
+    const assemblyAiApiKey = Deno.env.get('ASSEMBLY_AI');
 
-    console.log('Processing audio chunk for multi-speaker transcription...');
-
-    // Convert base64 to buffer
-    const audioBuffer = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-    
-    // Upload audio to AssemblyAI
-    const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
-      method: 'POST',
-      headers: {
-        'authorization': assemblyApiKey,
-        'content-type': 'application/octet-stream'
-      },
-      body: audioBuffer
+    console.log('Enhancing transcription segment:', { 
+      segmentId: segment.id,
+      hasAudioData: !!audioData,
+      contextSegmentsCount: contextSegments?.length || 0
     });
 
-    if (!uploadResponse.ok) {
-      throw new Error(`Upload failed: ${await uploadResponse.text()}`);
-    }
+    let enhancedSegment = { ...segment };
 
-    const { upload_url } = await uploadResponse.json();
-
-    // Start transcription with speaker diarization
-    const transcriptionResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
-      method: 'POST',
-      headers: {
-        'authorization': assemblyApiKey,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify({
-        audio_url: upload_url,
-        speaker_labels: enableSpeakerDiarization || true,
-        auto_highlights: true,
-        sentiment_analysis: true,
-        entity_detection: true,
-        language_detection: true,
-        punctuate: true,
-        format_text: true
-      })
-    });
-
-    if (!transcriptionResponse.ok) {
-      throw new Error(`Transcription request failed: ${await transcriptionResponse.text()}`);
-    }
-
-    const transcriptionJob = await transcriptionResponse.json();
-    
-    // Poll for completion (for real-time, we might implement streaming later)
-    let result = transcriptionJob;
-    let attempts = 0;
-    const maxAttempts = realtime ? 60 : 120; // Longer timeout for unlimited transcription
-
-    while (result.status !== 'completed' && result.status !== 'error' && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, realtime ? 1000 : 2000));
-      
-      const statusResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${result.id}`, {
-        headers: { 'authorization': assemblyApiKey }
-      });
-      
-      result = await statusResponse.json();
-      attempts++;
-    }
-
-    if (result.status === 'error') {
-      throw new Error(`Transcription failed: ${result.error}`);
-    }
-
-    if (result.status !== 'completed') {
-      // For real-time, return partial results if available
-      if (realtime && result.status === 'processing') {
-        return new Response(
-          JSON.stringify({
-            text: "Processing...",
-            segments: [],
-            status: 'processing'
+    // Enhance with Assembly AI for better accuracy
+    if (assemblyAiApiKey && audioData) {
+      try {
+        const audioAnalysisResponse = await fetch('https://api.assemblyai.com/v2/transcript', {
+          method: 'POST',
+          headers: {
+            'Authorization': assemblyAiApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            audio_data: audioData,
+            speaker_labels: true,
+            auto_highlights: true,
+            sentiment_analysis: true,
+            entity_detection: true,
           }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      throw new Error('Transcription timeout');
-    }
-
-    // Process the transcription results with speaker diarization
-    const segments = [];
-    
-    if (result.utterances && result.utterances.length > 0) {
-      // Use utterances for speaker-separated segments
-      for (const utterance of result.utterances) {
-        segments.push({
-          speaker: `Speaker ${utterance.speaker}`,
-          text: utterance.text,
-          confidence: utterance.confidence,
-          start_time: utterance.start / 1000, // Convert to seconds
-          end_time: utterance.end / 1000,
-          is_final: true
         });
-      }
-    } else if (result.words && result.words.length > 0) {
-      // Fallback to word-level results
-      let currentSpeaker = 'A';
-      let currentText = '';
-      let startTime = result.words[0].start / 1000;
-      
-      for (let i = 0; i < result.words.length; i++) {
-        const word = result.words[i];
-        const speaker = word.speaker || 'A';
-        
-        if (speaker !== currentSpeaker && currentText.trim()) {
-          segments.push({
-            speaker: `Speaker ${currentSpeaker}`,
-            text: currentText.trim(),
-            confidence: word.confidence || 0.9,
-            start_time: startTime,
-            end_time: word.start / 1000,
-            is_final: true
-          });
+
+        if (audioAnalysisResponse.ok) {
+          const analysisData = await audioAnalysisResponse.json();
           
-          currentText = word.text + ' ';
-          startTime = word.start / 1000;
-          currentSpeaker = speaker;
-        } else {
-          currentText += word.text + ' ';
+          // Update speaker information if available
+          if (analysisData.speaker_labels && analysisData.speaker_labels.length > 0) {
+            const speakerLabel = analysisData.speaker_labels[0];
+            enhancedSegment.speaker = `Speaker ${speakerLabel.speaker}`;
+          }
+
+          // Update confidence if available
+          if (analysisData.confidence) {
+            enhancedSegment.confidence = Math.max(enhancedSegment.confidence, analysisData.confidence);
+          }
+
+          // Add sentiment and entity information
+          enhancedSegment.sentiment = analysisData.sentiment_analysis_results?.[0]?.sentiment;
+          enhancedSegment.entities = analysisData.entities;
         }
+      } catch (error) {
+        console.error('Assembly AI enhancement error:', error);
       }
-      
-      // Add final segment
-      if (currentText.trim()) {
-        segments.push({
-          speaker: `Speaker ${currentSpeaker}`,
-          text: currentText.trim(),
-          confidence: 0.9,
-          start_time: startTime,
-          end_time: result.words[result.words.length - 1].end / 1000,
-          is_final: true
-        });
-      }
-    } else if (result.text) {
-      // Basic fallback without speaker separation
-      segments.push({
-        speaker: "Speaker A",
-        text: result.text,
-        confidence: result.confidence || 0.9,
-        start_time: 0,
-        end_time: result.audio_duration || 0,
-        is_final: true
-      });
     }
 
-    console.log(`Processed ${segments.length} speaker segments`);
+    // Use Hugging Face for additional text processing
+    if (huggingFaceApiKey) {
+      try {
+        // Sentiment analysis
+        const sentimentResponse = await fetch('https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-sentiment-latest', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${huggingFaceApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            inputs: segment.text
+          }),
+        });
 
-    return new Response(
-      JSON.stringify({
-        text: result.text || '',
-        segments: segments,
-        confidence: result.confidence || 0.9,
-        speakers_detected: result.utterances ? result.utterances.length : 1,
-        status: 'completed'
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+        if (sentimentResponse.ok) {
+          const sentimentData = await sentimentResponse.json();
+          if (sentimentData && sentimentData[0]) {
+            enhancedSegment.sentimentScore = sentimentData[0];
+          }
+        }
+
+        // Named Entity Recognition
+        const nerResponse = await fetch('https://api-inference.huggingface.co/models/dbmdz/bert-large-cased-finetuned-conll03-english', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${huggingFaceApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            inputs: segment.text
+          }),
+        });
+
+        if (nerResponse.ok) {
+          const nerData = await nerResponse.json();
+          enhancedSegment.namedEntities = nerData;
+        }
+
+      } catch (error) {
+        console.error('Hugging Face enhancement error:', error);
+      }
+    }
+
+    // Analyze context for better speaker identification
+    if (contextSegments && contextSegments.length > 0) {
+      const speakerPatterns = analyzeSpeakerPatterns(contextSegments, segment);
+      if (speakerPatterns.suggestedSpeaker) {
+        enhancedSegment.speaker = speakerPatterns.suggestedSpeaker;
+        enhancedSegment.speakerConfidence = speakerPatterns.confidence;
+      }
+    }
+
+    console.log('Transcription enhanced successfully:', {
+      originalSpeaker: segment.speaker,
+      enhancedSpeaker: enhancedSegment.speaker,
+      hasEnhancements: JSON.stringify(enhancedSegment) !== JSON.stringify(segment)
+    });
+
+    return new Response(JSON.stringify({ 
+      enhancedSegment,
+      success: true 
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   } catch (error) {
-    console.error('Transcription error:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
+    console.error('Error in enhance-transcription function:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message,
+      enhancedSegment: null
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
+
+function analyzeSpeakerPatterns(contextSegments: any[], currentSegment: any) {
+  // Simple pattern analysis based on speech patterns and timing
+  const recentSegments = contextSegments.slice(-3); // Last 3 segments
+  
+  if (recentSegments.length === 0) {
+    return { suggestedSpeaker: null, confidence: 0 };
+  }
+
+  // Check if the current segment continues from the same speaker
+  const lastSegment = recentSegments[recentSegments.length - 1];
+  const timeDiff = new Date(currentSegment.timestamp).getTime() - new Date(lastSegment.timestamp).getTime();
+  
+  // If less than 5 seconds gap, likely same speaker
+  if (timeDiff < 5000) {
+    return {
+      suggestedSpeaker: lastSegment.speaker,
+      confidence: 0.8
+    };
+  }
+
+  // Analyze speech patterns (simple heuristic)
+  const avgWordsPerSegment = currentSegment.text.split(' ').length;
+  const lastSpeakerAvgWords = recentSegments
+    .filter(s => s.speaker === lastSegment.speaker)
+    .reduce((sum, s) => sum + s.text.split(' ').length, 0) / recentSegments.filter(s => s.speaker === lastSegment.speaker).length;
+
+  // If similar word count pattern, likely same speaker
+  if (Math.abs(avgWordsPerSegment - lastSpeakerAvgWords) < 3) {
+    return {
+      suggestedSpeaker: lastSegment.speaker,
+      confidence: 0.6
+    };
+  }
+
+  return { suggestedSpeaker: null, confidence: 0 };
+}
