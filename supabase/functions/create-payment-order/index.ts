@@ -1,6 +1,5 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,104 +8,79 @@ const corsHeaders = {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { amount, currency, planName, planId, userId } = await req.json();
-
-    if (!amount || !currency || !planName || !userId) {
-      throw new Error('Missing required payment parameters');
-    }
-
-    const razorpayKeyId = Deno.env.get('RAZORPAY_KEY_ID');
-    const razorpayKeySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
-
-    if (!razorpayKeyId || !razorpayKeySecret) {
-      throw new Error('Razorpay API keys not configured');
-    }
-
-    console.log('Creating payment order:', { 
-      amount, 
-      currency, 
-      planName, 
-      userId: userId.slice(0, 8) + '...' 
-    });
+    const { amount, currency, plan_name, user_id } = await req.json();
 
     // Create Razorpay order
     const orderData = {
-      amount: amount, // Amount in paise
+      amount: amount, // Amount in cents
       currency: currency,
-      receipt: `receipt_${userId}_${Date.now()}`,
+      receipt: `receipt_${Date.now()}`,
       notes: {
-        plan_name: planName,
-        plan_id: planId,
-        user_id: userId
+        plan_name: plan_name,
+        user_id: user_id
       }
     };
 
-    const credentials = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
+    const auth = btoa(`${Deno.env.get('RAZORPAY_KEY_ID')}:${Deno.env.get('RAZORPAY_KEY_SECRET')}`);
     
-    const razorpayResponse = await fetch('https://api.razorpay.com/v1/orders', {
+    const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${credentials}`,
+        'Authorization': `Basic ${auth}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(orderData),
     });
 
-    if (!razorpayResponse.ok) {
-      const errorText = await razorpayResponse.text();
-      console.error('Razorpay API error:', razorpayResponse.status, errorText);
-      throw new Error(`Razorpay API error: ${razorpayResponse.status}`);
+    if (!response.ok) {
+      throw new Error('Failed to create Razorpay order');
     }
 
-    const order = await razorpayResponse.json();
-    console.log('Razorpay order created:', order.id);
-
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const order = await response.json();
 
     // Store order in database
-    const { error: dbError } = await supabase
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    await supabase
       .from('payment_orders')
       .insert({
+        user_id: user_id,
         order_id: order.id,
-        user_id: userId,
         amount: amount,
         currency: currency,
-        plan_name: planName,
-        plan_id: planId,
-        status: 'created',
-        razorpay_order_data: order
+        plan_name: plan_name,
+        status: 'created'
       });
 
-    if (dbError) {
-      console.error('Database error:', dbError);
-      throw new Error('Failed to store order in database');
-    }
-
-    return new Response(JSON.stringify({ 
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      keyId: razorpayKeyId,
-      success: true
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ 
+        order_id: order.id,
+        amount: order.amount,
+        currency: order.currency
+      }),
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
+    );
 
   } catch (error) {
-    console.error('Error in create-payment-order function:', error);
-    return new Response(JSON.stringify({ 
-      error: error.message,
-      success: false
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('Payment order creation error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 });

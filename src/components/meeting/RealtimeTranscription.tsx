@@ -52,13 +52,14 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
     try {
       console.log('Initializing real-time transcription...');
       
-      // Initialize speaker identifier with a single speaker
+      // Initialize speaker identifier
       speakerIdentifierRef.current = new SpeakerIdentifier();
       
       // Initialize audio processor
       audioProcessorRef.current = new AudioProcessor((audioData) => {
         if (speakerIdentifierRef.current) {
-          speakerIdentifierRef.current.identifySpeaker(audioData);
+          const speaker = speakerIdentifierRef.current.identifySpeaker(audioData);
+          console.log('Current speaker:', speaker);
         }
       });
 
@@ -67,16 +68,15 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
       }
 
       // Initialize Web Speech API for transcription
-      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
-      if (SpeechRecognitionAPI) {
-        recognitionRef.current = new SpeechRecognitionAPI();
+      if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognitionConstructor = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognitionRef.current = new SpeechRecognitionConstructor();
         
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
         recognitionRef.current.lang = 'en-US';
         
-        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+        recognitionRef.current.onresult = (event) => {
           let interimTranscript = '';
           let finalTranscript = '';
           
@@ -87,9 +87,8 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
             if (event.results[i].isFinal) {
               finalTranscript += transcript;
               
-              // Get current speaker (always the same person in this case)
-              const currentSpeaker = speakerIdentifierRef.current?.getCurrentSpeaker() || 'Main Speaker';
-              
+              // Create final segment
+              const currentSpeaker = speakerIdentifierRef.current?.identifySpeaker(new Float32Array()) || 'Speaker 1';
               const segment: TranscriptionSegment = {
                 id: Date.now().toString() + Math.random(),
                 speaker: currentSpeaker,
@@ -117,7 +116,7 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
           setCurrentText(interimTranscript);
         };
 
-        recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
+        recognitionRef.current.onerror = (event) => {
           console.error('Speech recognition error:', event.error);
         };
 
@@ -141,7 +140,7 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
         .insert({
           meeting_id: meetingId,
           speaker_name: segment.speaker,
-          speaker_id: segment.speaker.toLowerCase().replace(/\s+/g, '_'),
+          speaker_id: segment.speaker.toLowerCase().replace(' ', '_'),
           text: segment.text,
           start_time: Date.now() / 1000,
           end_time: Date.now() / 1000 + 3,
@@ -167,8 +166,13 @@ export const RealtimeTranscription: React.FC<RealtimeTranscriptionProps> = ({
   };
 
   const getSpeakerColor = (speaker: string) => {
-    // Since we're using one speaker, use a consistent color
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
+    const colors = {
+      'Speaker 1': 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
+      'Speaker 2': 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
+      'Speaker 3': 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
+      'Speaker 4': 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
+    };
+    return colors[speaker as keyof typeof colors] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300';
   };
 
   return (
