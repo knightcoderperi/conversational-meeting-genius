@@ -9,7 +9,6 @@ import { AuthPage } from "@/pages/AuthPage";
 import { Dashboard } from "@/pages/Dashboard";
 import { NewMeetingPage } from "@/pages/NewMeetingPage";
 import { MeetingPage } from "@/pages/MeetingPage";
-import { UpgradePage } from "@/pages/UpgradePage";
 import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
@@ -44,14 +43,6 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <MeetingPage />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/upgrade" 
-              element={
-                <ProtectedRoute>
-                  <UpgradePage />
                 </ProtectedRoute>
               } 
             />

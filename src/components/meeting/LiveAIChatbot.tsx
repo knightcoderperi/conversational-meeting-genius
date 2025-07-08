@@ -23,7 +23,6 @@ interface ChatMessage {
   type: 'user' | 'ai';
   content: string;
   timestamp: Date;
-  isGeneral?: boolean;
 }
 
 interface LiveAIChatbotProps {
@@ -38,34 +37,17 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [meetingContext, setMeetingContext] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Remove hardcoded API key - now using edge functions with configured secrets
-  
   // Quick action buttons for meeting analysis
   const quickQueries = [
-    "📝 Summarize key points from all speakers",
-    "✅ List action items and who mentioned them",
-    "👥 Who spoke most and what were their main points?",
-    "💡 Key decisions made by each participant",
-    "🔍 Important topics discussed by different speakers",
-    "⏱️ Meeting timeline with speaker contributions",
-    "📊 Speaker analysis and participation levels",
-    "🎯 Next steps assigned to specific people"
+    "📝 Summarize the meeting so far",
+    "✅ What are the action items mentioned?",
+    "💡 What decisions were made?",
+    "🔍 What are the main topics discussed?",
+    "⏱️ What was discussed in the last few minutes?",
+    "📊 Give me key insights from the meeting"
   ];
-
-  useEffect(() => {
-    // Update context whenever new transcription comes in with speaker names
-    if (transcriptionHistory.length > 0) {
-      const recentTranscripts = transcriptionHistory
-        .filter(segment => segment.isFinal)
-        .slice(-100) // Increased to 100 segments for better context
-        .map(segment => `[${segment.timestamp}] ${segment.speaker}: ${segment.text}`)
-        .join('\n');
-      setMeetingContext(recentTranscripts);
-    }
-  }, [transcriptionHistory]);
 
   useEffect(() => {
     scrollToBottom();
@@ -75,39 +57,25 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const isGeneralQuestion = (message: string): boolean => {
-    const meetingKeywords = [
-      'meeting', 'discuss', 'speaker', 'spoke', 'said', 'talked', 'mentioned', 'action', 'decision',
-      'summary', 'timeline', 'participant', 'topic', 'agenda', 'note', 'transcript', 'conversation',
-      'call', 'session', 'presentation', 'colleague', 'team member', 'minutes', 'recording'
-    ];
-    
-    const lowerMessage = message.toLowerCase();
-    // Check if the message contains meeting-related keywords or if we have context
-    const hasMeetingKeywords = meetingKeywords.some(keyword => lowerMessage.includes(keyword));
-    const hasTranscriptionContext = meetingContext.trim().length > 50;
-    
-    // If there's substantial meeting context, prefer meeting-focused AI unless clearly general
-    if (hasTranscriptionContext && !isObviouslyGeneral(lowerMessage)) {
-      return false; // Use meeting AI
+  const getMeetingContext = (): string => {
+    const finalSegments = transcriptionHistory.filter(segment => segment.isFinal);
+    if (finalSegments.length === 0) {
+      return '';
     }
     
-    return !hasMeetingKeywords;
+    return finalSegments
+      .map(segment => `[${segment.timestamp}] ${segment.speaker}: ${segment.text}`)
+      .join('\n');
   };
-
-  const isObviouslyGeneral = (message: string): boolean => {
-    const generalIndicators = [
-      'weather', 'news', 'recipe', 'joke', 'story', 'definition', 'explain', 'how to',
-      'what is', 'when did', 'where is', 'history of', 'tell me about', 'calculate',
-      'translate', 'programming', 'code', 'algorithm', 'math', 'science'
-    ];
-    
-    return generalIndicators.some(indicator => message.includes(indicator));
-  };
-
-  // Remove unused functions - now using edge function for all AI calls
 
   const sendMessageToAI = async (message: string) => {
+    const context = getMeetingContext();
+    
+    if (!context.trim()) {
+      toast.error('No meeting transcription available yet. Please start speaking during the recording.');
+      return;
+    }
+
     setIsProcessing(true);
     
     // Add user message immediately
@@ -121,50 +89,47 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     setMessages(prev => [...prev, userMessage]);
 
     try {
-      let aiResponse: string;
-      let isGeneral = false;
-
-      // Always use the edge function which will intelligently route between APIs
-      const contextToSend = isGeneralQuestion(message) ? '' : meetingContext;
-      isGeneral = contextToSend === '';
-
-      const response = await supabase.functions.invoke('ai-chat', {
+      console.log('Sending to Groq AI:', { message, contextLength: context.length });
+      
+      // Call Groq AI edge function
+      const { data, error } = await supabase.functions.invoke('groq-chat', {
         body: {
-          message,
-          context: contextToSend
+          message: message,
+          context: context
         }
       });
 
-      if (response.error) {
-        throw new Error(`AI API call failed: ${response.error.message}`);
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw new Error(error.message);
       }
 
-      aiResponse = response.data.response;
-      console.log(`Used ${isGeneral ? 'general' : 'meeting'} AI for question`);
-      
+      if (!data || !data.response) {
+        throw new Error('No response received from AI');
+      }
+
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: aiResponse,
-        timestamp: new Date(),
-        isGeneral
+        content: data.response,
+        timestamp: new Date()
       };
 
       setMessages(prev => [...prev, aiMessage]);
 
-      // Save to database
+      // Save to database if meeting ID exists
       if (meetingId) {
-        await saveChatMessage(meetingId, message, aiResponse);
+        await saveChatMessage(meetingId, message, data.response);
       }
       
     } catch (error) {
       console.error('Error getting AI response:', error);
-      toast.error('Failed to get AI response - check API configuration');
+      toast.error('Failed to get AI response. Please try again.');
       
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: 'Sorry, I encountered an error processing your request. Please check that the API keys are properly configured.',
+        content: 'Sorry, I encountered an error while processing your request. Please make sure you have spoken during the recording so I have meeting content to analyze.',
         timestamp: new Date()
       };
       
@@ -176,14 +141,16 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
 
   const saveChatMessage = async (meetingId: string, message: string, aiResponse: string) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
       await supabase
         .from('live_chat_messages')
         .insert({
           meeting_id: meetingId,
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user?.id,
           message,
           ai_response: aiResponse,
-          context_summary: meetingContext.slice(0, 500)
+          context_summary: getMeetingContext().slice(0, 500)
         });
     } catch (error) {
       console.error('Error saving chat message:', error);
@@ -201,6 +168,16 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
     sendMessageToAI(query);
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  const hasTranscriptionData = transcriptionHistory.some(segment => segment.isFinal);
+  const transcriptionCount = transcriptionHistory.filter(s => s.isFinal).length;
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
@@ -209,36 +186,33 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
-            <span>Enhanced AI Assistant</span>
+            <span>AI Meeting Assistant</span>
           </div>
-          <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-              {transcriptionHistory.length} segments
-            </Badge>
-            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-              Dual AI
-            </Badge>
-          </div>
+          <Badge variant="outline" className={hasTranscriptionData ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500"}>
+            {transcriptionCount} segments
+          </Badge>
         </CardTitle>
       </CardHeader>
       
       {/* Quick Query Buttons */}
-      <div className="px-4 pb-3">
-        <div className="grid grid-cols-2 gap-2">
-          {quickQueries.map((query, index) => (
-            <Button
-              key={index}
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickQuery(query)}
-              className="text-xs h-auto py-2 px-3 justify-start hover:bg-blue-50 hover:border-blue-200"
-              disabled={isProcessing}
-            >
-              {query}
-            </Button>
-          ))}
+      {hasTranscriptionData && (
+        <div className="px-4 pb-3">
+          <div className="grid grid-cols-2 gap-2">
+            {quickQueries.map((query, index) => (
+              <Button
+                key={index}
+                variant="outline"
+                size="sm"
+                onClick={() => handleQuickQuery(query)}
+                className="text-xs h-auto py-2 px-3 justify-start hover:bg-blue-50 hover:border-blue-200 text-left"
+                disabled={isProcessing}
+              >
+                {query}
+              </Button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       
       {/* Messages */}
       <CardContent className="flex-1 p-0 flex flex-col">
@@ -248,18 +222,19 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
               <div className="text-center py-8">
                 <Bot className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  Enhanced AI Assistant Ready
+                  AI Assistant Ready
                 </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                  Ask about your meeting or any general questions
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                  {hasTranscriptionData 
+                    ? `I can analyze your meeting with ${transcriptionCount} transcribed segments`
+                    : 'Start speaking during the recording to enable AI analysis'
+                  }
                 </p>
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                  <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                    <div>🎯 <strong>Meeting Questions:</strong> Uses Groq AI with multi-speaker context</div>
-                    <div>🌍 <strong>General Questions:</strong> Uses Cyber Alpha AI for any topic</div>
-                    <div>👥 <strong>Speaker Analysis:</strong> Identifies and analyzes individual contributions</div>
-                  </div>
-                </div>
+                {hasTranscriptionData && (
+                  <p className="text-xs text-gray-500">
+                    Use the quick queries above or ask me anything about your meeting
+                  </p>
+                )}
               </div>
             )}
             
@@ -269,7 +244,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                  className={`max-w-[85%] rounded-lg px-4 py-3 ${
                     message.type === 'user'
                       ? 'bg-blue-500 text-white'
                       : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
@@ -277,18 +252,13 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                 >
                   <div className="flex items-start space-x-2">
                     {message.type === 'ai' && (
-                      <div className="flex items-center space-x-1">
-                        <Bot className="w-4 h-4 mt-1 flex-shrink-0" />
-                        <Badge variant="secondary" className="text-xs">
-                          {message.isGeneral ? 'General AI' : 'Meeting AI'}
-                        </Badge>
-                      </div>
+                      <Bot className="w-4 h-4 mt-1 flex-shrink-0" />
                     )}
                     {message.type === 'user' && (
                       <User className="w-4 h-4 mt-1 flex-shrink-0" />
                     )}
                     <div className="flex-1">
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
                       <p className="text-xs opacity-70 mt-2">
                         {message.timestamp.toLocaleTimeString()}
                       </p>
@@ -300,7 +270,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             
             {isProcessing && (
               <div className="flex justify-start">
-                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3 max-w-[80%]">
+                <div className="bg-gray-100 dark:bg-gray-800 rounded-lg px-4 py-3 max-w-[85%]">
                   <div className="flex items-center space-x-2">
                     <Bot className="w-4 h-4" />
                     <div className="flex space-x-1">
@@ -308,6 +278,7 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
                       <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                       <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                     </div>
+                    <span className="text-sm text-gray-600">Analyzing meeting...</span>
                   </div>
                 </div>
               </div>
@@ -322,23 +293,30 @@ export const LiveAIChatbot: React.FC<LiveAIChatbotProps> = ({
             <Input
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-              placeholder="Ask about the meeting or any general question..."
-              disabled={isProcessing}
+              onKeyPress={handleKeyPress}
+              placeholder={hasTranscriptionData ? "Ask me about the meeting..." : "Start speaking to enable AI chat"}
+              disabled={isProcessing || !hasTranscriptionData}
               className="flex-1"
             />
             <Button
               onClick={handleSendMessage}
-              disabled={isProcessing || !inputMessage.trim()}
+              disabled={isProcessing || !inputMessage.trim() || !hasTranscriptionData}
               size="sm"
               className="px-4"
             >
               <Send className="w-4 h-4" />
             </Button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">
-            💡 Meeting questions use Groq AI with speaker context • General questions use Cyber Alpha AI
-          </p>
+          {!hasTranscriptionData && (
+            <p className="text-xs text-gray-500 mt-2">
+              💡 Speak during the recording to enable AI assistant
+            </p>
+          )}
+          {hasTranscriptionData && (
+            <p className="text-xs text-green-600 mt-2">
+              ✅ Ready to analyze {transcriptionCount} transcribed segments
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
